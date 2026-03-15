@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Wallet, Eye, EyeOff, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
-import { createClient } from '../lib/supabase';
+import { createClient } from '../../lib/supabase';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -17,25 +17,20 @@ export default function ResetPasswordPage() {
   const [invalidLink, setInvalidLink] = useState(false);
 
   useEffect(() => {
-    // Supabase puts the recovery token in the URL hash when user clicks email link
-    // We need to listen for the PASSWORD_RECOVERY event to know session is ready
     const supabase = createClient();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' && session) {
         setSessionReady(true);
       } else if (event === 'SIGNED_IN' && session) {
-        // Sometimes comes as SIGNED_IN instead
         setSessionReady(true);
       }
     });
 
-    // Check if there's already an active session (user already authenticated via link)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setSessionReady(true);
       } else {
-        // No session and no recovery event after 3s = invalid/expired link
         setTimeout(() => {
           supabase.auth.getSession().then(({ data: { session } }) => {
             if (!session) setInvalidLink(true);
@@ -75,11 +70,9 @@ export default function ResetPasswordPage() {
     }
 
     setDone(true);
-    // Redirect to dashboard after 2 seconds
     setTimeout(() => router.push('/dashboard'), 2000);
   };
 
-  // Invalid or expired link
   if (invalidLink) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
@@ -118,7 +111,6 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
-          {/* Header */}
           <div className="gradient-card p-8 text-white text-center">
             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Wallet className="w-7 h-7 text-white" />
@@ -129,13 +121,11 @@ export default function ResetPasswordPage() {
 
           <div className="p-6">
             {!sessionReady ? (
-              /* Loading while Supabase processes the token */
               <div className="text-center py-8 space-y-3">
                 <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
                 <p className="text-sm text-slate-500">Verifying your reset link...</p>
               </div>
             ) : done ? (
-              /* Success */
               <div className="text-center py-4 space-y-4">
                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
                   <CheckCircle className="w-8 h-8 text-emerald-600" />
@@ -149,7 +139,6 @@ export default function ResetPasswordPage() {
                 <Loader2 className="w-5 h-5 text-indigo-400 animate-spin mx-auto" />
               </div>
             ) : (
-              /* Reset form */
               <>
                 <div className="mb-6">
                   <h2 className="text-lg font-bold text-slate-800 mb-1">Create new password</h2>
@@ -178,23 +167,16 @@ export default function ResetPasswordPage() {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    {/* Password strength indicator */}
                     {password.length > 0 && (
-                      <div className="mt-2 flex gap-1">
+                      <div className="mt-2 flex gap-1 items-center">
                         {[1, 2, 3, 4].map((level) => {
                           const strength = password.length >= 12 ? 4 : password.length >= 8 ? 3 : password.length >= 6 ? 2 : 1;
                           return (
-                            <div
-                              key={level}
-                              className={`h-1 flex-1 rounded-full transition-colors ${
-                                level <= strength
-                                  ? strength === 1 ? 'bg-red-400'
-                                    : strength === 2 ? 'bg-amber-400'
-                                    : strength === 3 ? 'bg-emerald-400'
-                                    : 'bg-emerald-500'
-                                  : 'bg-slate-100'
-                              }`}
-                            />
+                            <div key={level} className={`h-1 flex-1 rounded-full transition-colors ${
+                              level <= strength
+                                ? strength === 1 ? 'bg-red-400' : strength === 2 ? 'bg-amber-400' : 'bg-emerald-400'
+                                : 'bg-slate-100'
+                            }`} />
                           );
                         })}
                         <span className="text-xs text-slate-400 ml-1">
