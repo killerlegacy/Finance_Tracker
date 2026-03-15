@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { type ReactNode } from 'react';
 import {
   Wallet, Plus, LayoutDashboard, Receipt, CreditCard, Target, Repeat, User, LogOut, Loader2,
 } from 'lucide-react';
@@ -133,7 +134,7 @@ export default function DashboardPage() {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 
-  const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
+  const tabs: { key: TabType; label: string; icon: ReactNode }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4 inline mr-1" /> },
     { key: 'transactions', label: 'Transactions', icon: <Receipt className="w-4 h-4 inline mr-1" /> },
     { key: 'accounts', label: 'Accounts', icon: <CreditCard className="w-4 h-4 inline mr-1" /> },
