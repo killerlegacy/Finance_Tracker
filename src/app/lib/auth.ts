@@ -11,10 +11,11 @@ export async function registerUser(email: string, password: string, fullName: st
   });
 
   if (error) {
-    // Handle specific registration errors
-    if (error.message.toLowerCase().includes('already registered') ||
-        error.message.toLowerCase().includes('already exists') ||
-        error.message.toLowerCase().includes('user already')) {
+    if (
+      error.message.toLowerCase().includes('already registered') ||
+      error.message.toLowerCase().includes('already exists') ||
+      error.message.toLowerCase().includes('user already')
+    ) {
       return { ok: false, error: 'An account with this email already exists. Please log in instead.' };
     }
     if (error.message.toLowerCase().includes('password')) {
@@ -26,14 +27,14 @@ export async function registerUser(email: string, password: string, fullName: st
     return { ok: false, error: error.message };
   }
 
-  if (!data.session && !data.user) {
-    return { ok: false, error: 'Signup failed. Please try again.' };
-  }
-
-  // Supabase sometimes returns a user with no session if email is already taken
-  // but confirmation is off — identities array will be empty
+  // When email confirmation is OFF, Supabase still returns a user object
+  // but identities will be empty if the email is already taken
   if (data.user && data.user.identities && data.user.identities.length === 0) {
     return { ok: false, error: 'An account with this email already exists. Please log in instead.' };
+  }
+
+  if (!data.session && !data.user) {
+    return { ok: false, error: 'Signup failed. Please try again.' };
   }
 
   return { ok: true };
@@ -43,75 +44,77 @@ export async function loginUser(email: string, password: string) {
   const supabase = createClient();
   const normalizedEmail = email.toLowerCase().trim();
 
+  // Step 1 — attempt login
   const { error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,
     password,
   });
 
-  if (error) {
-    const msg = error.message.toLowerCase();
+  if (!error) return { ok: true };
 
-    // Supabase returns "Invalid login credentials" for both wrong password
-    // and non-existent user. We differentiate by checking the error code.
-    if (
-      msg.includes('invalid login credentials') ||
-      msg.includes('invalid credentials') ||
-      error.code === 'invalid_credentials'
-    ) {
-      // Try to determine if the user exists by attempting a password reset
-      // (this doesn't send an email, just tells us if the user exists)
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        normalizedEmail,
-        { redirectTo: undefined as unknown as string }
-      );
+  const msg = error.message.toLowerCase();
 
-      // If reset returns no error, user exists → wrong password
-      // If reset also errors with user not found → account doesn't exist
-      if (
-        resetError &&
-        (resetError.message.toLowerCase().includes('user not found') ||
-         resetError.message.toLowerCase().includes('unable to validate') ||
-         resetError.code === 'user_not_found')
-      ) {
+  // Step 2 — on credentials failure, check if the email exists
+  // by querying our records table for a profile with this email.
+  // This is safe because it only runs after a failed login attempt.
+  if (
+    msg.includes('invalid login credentials') ||
+    msg.includes('invalid credentials') ||
+    error.code === 'invalid_credentials'
+  ) {
+    try {
+      const { data: profileRows } = await supabase
+        .from('records')
+        .select('id')
+        .eq('type', 'profile')
+        .filter('data->>email', 'eq', normalizedEmail)
+        .limit(1);
+
+      const userExists = profileRows && profileRows.length > 0;
+
+      if (!userExists) {
         return {
           ok: false,
-          error: 'No account found with this email address. Please sign up first.',
+          error: 'No account found with this email address. Please sign up to get started.',
         };
       }
 
-      // User exists but password is wrong
+      // User exists but password was wrong
       return {
         ok: false,
-        error: 'Incorrect password. Please try again or reset your password.',
+        error: 'Incorrect password. Please try again.',
       };
-    }
-
-    if (msg.includes('email not confirmed')) {
+    } catch {
+      // If the check fails for any reason, fall back to a generic message
       return {
         ok: false,
-        error: 'Please confirm your email before logging in.',
+        error: 'Invalid email or password. Please check your details and try again.',
       };
     }
-
-    if (msg.includes('too many requests') || error.code === 'over_request_rate_limit') {
-      return {
-        ok: false,
-        error: 'Too many login attempts. Please wait a few minutes and try again.',
-      };
-    }
-
-    if (msg.includes('network') || msg.includes('fetch')) {
-      return {
-        ok: false,
-        error: 'Network error. Please check your connection and try again.',
-      };
-    }
-
-    // Fallback for anything unexpected
-    return { ok: false, error: 'Login failed. Please check your details and try again.' };
   }
 
-  return { ok: true };
+  if (msg.includes('email not confirmed')) {
+    return {
+      ok: false,
+      error: 'Please confirm your email address before logging in.',
+    };
+  }
+
+  if (msg.includes('too many requests') || error.code === 'over_request_rate_limit') {
+    return {
+      ok: false,
+      error: 'Too many login attempts. Please wait a few minutes and try again.',
+    };
+  }
+
+  if (msg.includes('network') || msg.includes('fetch')) {
+    return {
+      ok: false,
+      error: 'Network error. Please check your connection and try again.',
+    };
+  }
+
+  return { ok: false, error: 'Login failed. Please check your details and try again.' };
 }
 
 export async function logout() {
