@@ -14,37 +14,75 @@ interface TransactionsViewProps {
 export default function TransactionsView({ transactions, currency, onDelete }: TransactionsViewProps) {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const [filterType, setFilterType] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
   const [filterMonth, setFilterMonth] = useState(currentMonth);
+
+  // Get unique categories from all transactions for the dropdown
+  const categories = Array.from(new Set(transactions.map((t) => t.category).filter(Boolean))).sort();
 
   let filtered = [...transactions];
   if (filterType !== 'all') filtered = filtered.filter((t) => t.type === filterType);
+  if (filterCategory !== 'all') filtered = filtered.filter((t) => t.category === filterCategory);
   if (filterMonth) filtered = filtered.filter((t) => t.date?.startsWith(filterMonth));
   filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const categories = Array.from(new Set(transactions.map((t) => t.category).filter(Boolean)));
+  // Summary totals for filtered results
+  const filteredIncome = filtered.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const filteredExpenses = filtered.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 items-center justify-between">
-        <div className="flex gap-2">
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
-          >
-            <option value="all">All Types</option>
-            <option value="expense">Expenses</option>
-            <option value="income">Income</option>
-          </select>
-        </div>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <select
+          value={filterType}
+          onChange={(e) => { setFilterType(e.target.value); setFilterCategory('all'); }}
+          className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+        >
+          <option value="all">All Types</option>
+          <option value="expense">Expenses</option>
+          <option value="income">Income</option>
+        </select>
+
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value)}
+          className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
+        >
+          <option value="all">All Categories</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>{CATEGORY_EMOJIS[c] || ''} {c}</option>
+          ))}
+        </select>
+
         <input
           type="month"
           value={filterMonth}
           onChange={(e) => setFilterMonth(e.target.value)}
           className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none"
         />
+
+        {/* Clear filters */}
+        {(filterType !== 'all' || filterCategory !== 'all') && (
+          <button
+            onClick={() => { setFilterType('all'); setFilterCategory('all'); }}
+            className="text-xs text-indigo-600 font-medium hover:underline px-2"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
+      {/* Summary bar */}
+      {filtered.length > 0 && (
+        <div className="flex gap-4 bg-white rounded-xl px-4 py-3 border border-slate-100 shadow-sm text-sm">
+          <span className="text-slate-500">{filtered.length} transaction{filtered.length !== 1 ? 's' : ''}</span>
+          {filteredIncome > 0 && <span className="text-emerald-600 font-semibold">+{formatCurrency(filteredIncome, currency)}</span>}
+          {filteredExpenses > 0 && <span className="text-red-500 font-semibold">-{formatCurrency(filteredExpenses, currency)}</span>}
+        </div>
+      )}
+
+      {/* Transaction list */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
           <p className="text-sm text-slate-500 text-center py-8">
