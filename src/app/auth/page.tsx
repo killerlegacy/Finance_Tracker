@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react';
 import { loginUser, registerUser, getSession } from '../lib/auth';
+import { loadAllRecords } from '../lib/db';
 
 function AuthForm() {
   const router = useRouter();
@@ -20,7 +21,6 @@ function AuthForm() {
   useEffect(() => {
     const m = searchParams.get('mode');
     if (m === 'register' || m === 'login') setMode(m);
-    // Check existing session
     getSession().then((session) => {
       if (session) router.replace('/dashboard');
       else setLoading(false);
@@ -41,7 +41,7 @@ function AuthForm() {
     const result = mode === 'register'
       ? await registerUser(email, password, fullName)
       : await loginUser(email, password);
-    
+
     if (!result.ok) {
       setError(result.error || 'Something went wrong.');
       setLoading(false);
@@ -51,7 +51,18 @@ function AuthForm() {
     if (mode === 'register') {
       router.push('/onboarding');
     } else {
-      router.push('/dashboard');
+      const session = await getSession();
+      if (session) {
+        const records = await loadAllRecords(session.user.id);
+        const profile = records.find((d) => d.type === 'profile') as { onboarding_complete?: boolean } | undefined;
+        if (profile?.onboarding_complete) {
+          router.push('/dashboard');
+        } else {
+          router.push('/onboarding');
+        }
+      } else {
+        router.push('/dashboard');
+      }
     }
   };
 
@@ -90,7 +101,7 @@ function AuthForm() {
           <div className="flex border-b border-slate-100">
             {(['login', 'register'] as const).map((m) => (
               <button key={m} onClick={() => switchMode(m)}
-                className={`flex-1 py-3.5 text-sm font-semibold transition-colors capitalize ${
+                className={`flex-1 py-3.5 text-sm font-semibold transition-colors ${
                   mode === m ? 'text-indigo-600 border-b-2 border-indigo-600 -mb-px' : 'text-slate-500 hover:text-slate-700'
                 }`}>
                 {m === 'login' ? 'Log In' : 'Create Account'}
@@ -114,7 +125,18 @@ function AuthForm() {
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
             </div>
             <div>
-              <label className="text-sm font-medium text-slate-700 block mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium text-slate-700">Password</label>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => router.push('/auth/forgot-password')}
+                    className="text-xs text-indigo-600 hover:underline font-medium"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required
                   placeholder={mode === 'register' ? 'Min. 6 characters' : 'Your password'}
