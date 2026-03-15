@@ -15,8 +15,9 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const session = getSession();
-    if (session) router.replace('/dashboard');
+    getSession().then((session) => {
+      if (session) router.replace('/dashboard');
+    });
   }, [router]);
 
   useEffect(() => {
