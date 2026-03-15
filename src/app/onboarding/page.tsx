@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wallet, ChevronRight, ChevronLeft, Check, Loader2 } from 'lucide-react';
-import { getSession, getUser } from '../lib/auth';
+import { Wallet, ChevronRight, ChevronLeft, Check, Loader2, Plus, Trash2 } from 'lucide-react';
+import { getSession } from '../lib/auth';
 import { createRecord } from '../lib/db';
 import { generateId } from '../lib/constants';
-import { Profile } from '../lib/types';
+import { Profile, Account } from '../lib/types';
 import { COUNTRIES, CURRENCIES } from '../lib/constants';
 
 const FINANCIAL_GOALS = [
@@ -27,18 +27,44 @@ const INCOME_RANGES = [
   { value: 'prefer_not', label: 'Prefer not to say' },
 ];
 
+const ACCOUNT_TYPES = [
+  { value: 'Bank', label: '🏦 Bank Account' },
+  { value: 'Cash', label: '💵 Cash' },
+  { value: 'Credit Card', label: '💳 Credit Card' },
+  { value: 'Digital Wallet', label: '📱 Digital Wallet' },
+  { value: 'Savings', label: '🐷 Savings Account' },
+];
+
+interface InitialAccount {
+  name: string;
+  type: string;
+  balance: string;
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const totalSteps = 4;
+  const totalSteps = 5;
   const [userId, setUserId] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
+
+  // Step 1
   const [country, setCountry] = useState('');
   const [currency, setCurrency] = useState('₨');
+
+  // Step 2
   const [incomeRange, setIncomeRange] = useState('');
   const [financialGoal, setFinancialGoal] = useState('');
+
+  // Step 3 — initial accounts
+  const [accounts, setAccounts] = useState<InitialAccount[]>([
+    { name: '', type: 'Bank', balance: '' },
+  ]);
+
+  // Step 4
   const [phone, setPhone] = useState('');
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -56,11 +82,30 @@ export default function OnboardingPage() {
   const canProceed = () => {
     if (step === 1) return country !== '' && currency !== '';
     if (step === 2) return incomeRange !== '' && financialGoal !== '';
+    if (step === 3) {
+      // At least one account must have a name and valid balance
+      return accounts.some((a) => a.name.trim() !== '' && a.balance !== '' && !isNaN(parseFloat(a.balance)));
+    }
     return true;
+  };
+
+  const addAccount = () => {
+    if (accounts.length < 5) setAccounts([...accounts, { name: '', type: 'Bank', balance: '' }]);
+  };
+
+  const removeAccount = (i: number) => {
+    if (accounts.length > 1) setAccounts(accounts.filter((_, idx) => idx !== i));
+  };
+
+  const updateAccount = (i: number, field: keyof InitialAccount, value: string) => {
+    setAccounts(accounts.map((a, idx) => idx === i ? { ...a, [field]: value } : a));
   };
 
   const handleFinish = async () => {
     setSaving(true);
+    setError('');
+
+    // Save profile
     const profile: Profile = {
       id: generateId(),
       type: 'profile',
@@ -75,12 +120,27 @@ export default function OnboardingPage() {
       created_at: new Date().toISOString(),
     };
 
-    const ok = await createRecord(userId, profile);
-    if (!ok) {
+    const profileOk = await createRecord(userId, profile);
+    if (!profileOk) {
       setError('Failed to save profile. Please try again.');
       setSaving(false);
       return;
     }
+
+    // Save valid accounts
+    const validAccounts = accounts.filter((a) => a.name.trim() && a.balance !== '' && !isNaN(parseFloat(a.balance)));
+    for (const acc of validAccounts) {
+      const accountRecord: Account = {
+        id: generateId(),
+        type: 'account',
+        service_name: acc.name.trim(),
+        category: acc.type,
+        amount: parseFloat(acc.balance),
+        created_at: new Date().toISOString(),
+      };
+      await createRecord(userId, accountRecord);
+    }
+
     router.push('/dashboard');
   };
 
@@ -94,6 +154,14 @@ export default function OnboardingPage() {
 
   const progressPct = ((step - 1) / (totalSteps - 1)) * 100;
 
+  const stepTitles: Record<number, string> = {
+    1: `Welcome, ${userName.split(' ')[0]}! 👋`,
+    2: 'Your financial picture',
+    3: 'Add your accounts',
+    4: 'Contact details',
+    5: "You're all set!",
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
@@ -105,16 +173,12 @@ export default function OnboardingPage() {
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+          {/* Progress header */}
           <div className="px-6 pt-6 pb-4 border-b border-slate-100">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-xs text-slate-500 font-medium uppercase tracking-wider">Setup</p>
-                <h2 className="text-lg font-bold text-slate-800">
-                  {step === 1 && `Welcome, ${userName.split(' ')[0]}! 👋`}
-                  {step === 2 && 'Your financial picture'}
-                  {step === 3 && 'Contact details'}
-                  {step === 4 && "You're all set!"}
-                </h2>
+                <h2 className="text-lg font-bold text-slate-800">{stepTitles[step]}</h2>
               </div>
               <span className="text-sm font-semibold text-slate-400">{step} / {totalSteps}</span>
             </div>
@@ -124,6 +188,8 @@ export default function OnboardingPage() {
           </div>
 
           <div className="p-6">
+
+            {/* Step 1: Country & Currency */}
             {step === 1 && (
               <div className="space-y-5">
                 <p className="text-slate-600 text-sm">Let&apos;s personalise your experience. Where are you based and what currency do you use?</p>
@@ -156,6 +222,7 @@ export default function OnboardingPage() {
               </div>
             )}
 
+            {/* Step 2: Income & Goal */}
             {step === 2 && (
               <div className="space-y-5">
                 <p className="text-slate-600 text-sm">This helps us tailor your dashboard. All info is private to you.</p>
@@ -189,7 +256,55 @@ export default function OnboardingPage() {
               </div>
             )}
 
+            {/* Step 3: Initial Accounts */}
             {step === 3 && (
+              <div className="space-y-4">
+                <p className="text-slate-600 text-sm">Add at least one account to track your starting balance. You can add more later.</p>
+                <div className="space-y-3">
+                  {accounts.map((acc, i) => (
+                    <div key={i} className="bg-slate-50 rounded-2xl p-4 space-y-3 relative">
+                      {accounts.length > 1 && (
+                        <button onClick={() => removeAccount(i)}
+                          className="absolute top-3 right-3 p-1.5 hover:bg-red-100 rounded-lg text-slate-400 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <div>
+                        <label className="text-xs font-medium text-slate-600 block mb-1">Account Name</label>
+                        <input type="text" value={acc.name} onChange={(e) => updateAccount(i, 'name', e.target.value)}
+                          placeholder="e.g. HBL Bank, Cash Wallet"
+                          className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs font-medium text-slate-600 block mb-1">Account Type</label>
+                          <select value={acc.type} onChange={(e) => updateAccount(i, 'type', e.target.value)}
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white">
+                            {ACCOUNT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-slate-600 block mb-1">Current Balance ({currency})</label>
+                          <input type="number" value={acc.balance} onChange={(e) => updateAccount(i, 'balance', e.target.value)}
+                            placeholder="0"
+                            className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {accounts.length < 5 && (
+                  <button onClick={addAccount}
+                    className="w-full border-2 border-dashed border-slate-300 rounded-xl py-3 text-sm text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2">
+                    <Plus className="w-4 h-4" /> Add another account
+                  </button>
+                )}
+                <p className="text-xs text-slate-400 text-center">This sets your starting balance so your Total Balance is accurate from day one.</p>
+              </div>
+            )}
+
+            {/* Step 4: Phone */}
+            {step === 4 && (
               <div className="space-y-5">
                 <p className="text-slate-600 text-sm">Almost done! Add your phone number for your profile (optional).</p>
                 <div>
@@ -199,8 +314,13 @@ export default function OnboardingPage() {
                 </div>
                 <div className="bg-slate-50 rounded-2xl p-4 space-y-2">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Profile summary</p>
-                  {[['Name', userName], ['Email', userEmail], ['Country', country], ['Currency', currency],
-                    ['Goal', FINANCIAL_GOALS.find(g => g.value === financialGoal)?.label || '']].map(([label, value]) => (
+                  {[
+                    ['Name', userName],
+                    ['Country', country],
+                    ['Currency', currency],
+                    ['Accounts', accounts.filter(a => a.name).map(a => a.name).join(', ') || '—'],
+                    ['Goal', FINANCIAL_GOALS.find(g => g.value === financialGoal)?.label || ''],
+                  ].map(([label, value]) => (
                     <div key={label} className="flex justify-between text-sm">
                       <span className="text-slate-500">{label}</span>
                       <span className="font-medium text-right max-w-[60%] truncate">{value}</span>
@@ -210,7 +330,8 @@ export default function OnboardingPage() {
               </div>
             )}
 
-            {step === 4 && (
+            {/* Step 5: Done */}
+            {step === 5 && (
               <div className="text-center space-y-6 py-4">
                 <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
                   <Check className="w-10 h-10 text-emerald-600" />
@@ -218,7 +339,7 @@ export default function OnboardingPage() {
                 <div>
                   <h3 className="text-xl font-bold text-slate-900 mb-2">You&apos;re ready to go!</h3>
                   <p className="text-slate-500 text-sm leading-relaxed">
-                    Your profile is set up. Your data will sync across all your devices automatically via Supabase cloud storage.
+                    Your profile and accounts are set up. Your data syncs across all your devices automatically.
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-center">
@@ -233,26 +354,27 @@ export default function OnboardingPage() {
               </div>
             )}
 
+            {/* Navigation */}
             <div className="flex gap-3 mt-6">
-              {step > 1 && step < 4 && (
+              {step > 1 && step < 5 && (
                 <button onClick={() => setStep(step - 1)}
                   className="flex items-center gap-2 px-5 py-3 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:border-slate-300 transition-colors">
                   <ChevronLeft className="w-4 h-4" /> Back
                 </button>
               )}
-              {step < 3 && (
+              {step < 4 && (
                 <button onClick={() => canProceed() && setStep(step + 1)} disabled={!canProceed()}
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white gradient-card hover:shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed">
                   Continue <ChevronRight className="w-4 h-4" />
                 </button>
               )}
-              {step === 3 && (
-                <button onClick={() => setStep(4)}
+              {step === 4 && (
+                <button onClick={() => setStep(5)}
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white gradient-card hover:shadow-lg transition-all">
                   Review & Finish <ChevronRight className="w-4 h-4" />
                 </button>
               )}
-              {step === 4 && (
+              {step === 5 && (
                 <button onClick={handleFinish} disabled={saving}
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm text-white gradient-card hover:shadow-lg transition-all disabled:opacity-60">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
