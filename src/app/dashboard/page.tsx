@@ -218,7 +218,7 @@ export default function DashboardPage() {
         {currentTab === 'accounts' && <AccountsView accounts={accounts} currency={currency} onDelete={requestDelete} onAdd={() => setShowAccount(true)} />}
         {currentTab === 'budgets' && <BudgetsView budgets={budgets} transactions={transactions} currency={currency} onDelete={requestDelete} onAdd={() => setShowBudget(true)} />}
         {currentTab === 'subscriptions' && <SubscriptionsView subscriptions={subscriptions} currency={currency} onDelete={requestDelete} onAdd={() => setShowSubscription(true)} />}
-        {currentTab === 'profile' && <ProfileView profile={profile} currency={currency} onEdit={() => setShowProfile(true)} onCurrencyChange={(c) => { setCurrency(c); showToast(`Currency updated to ${c}`); }} />}
+        {currentTab === 'profile' && <ProfileView profile={profile} currency={currency} userId={userId} onEdit={() => setShowProfile(true)} onCurrencyChange={(c) => { setCurrency(c); showToast(`Currency updated to ${c}`); }} />}
       </main>
 
       {/* Modals */}
