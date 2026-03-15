@@ -19,7 +19,7 @@ export default function ProfileModal({ isOpen, onClose, onSave, existingProfile 
   const [country, setCountry] = useState('');
 
   useEffect(() => {
-    if (existingProfile) {
+    if (existingProfile && isOpen) {
       setFullName(existingProfile.full_name || '');
       setEmail(existingProfile.email || '');
       setPhone(existingProfile.phone || '');
@@ -38,6 +38,10 @@ export default function ProfileModal({ isOpen, onClose, onSave, existingProfile 
       email,
       phone,
       country,
+      currency: existingProfile?.currency || '₨',
+      monthly_income: existingProfile?.monthly_income || '',
+      financial_goal: existingProfile?.financial_goal || '',
+      onboarding_complete: existingProfile?.onboarding_complete ?? true,
       created_at: existingProfile?.created_at || new Date().toISOString(),
     });
     onClose();
@@ -53,41 +57,26 @@ export default function ProfileModal({ isOpen, onClose, onSave, existingProfile 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div>
             <label className="text-sm font-medium text-slate-700">Full Name</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
               className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Enter your full name"
-            />
+              placeholder="Enter your full name" />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
               className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="your@email.com"
-            />
+              placeholder="your@email.com" />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Phone</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
               className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Your phone number"
-            />
+              placeholder="Your phone number" />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Country</label>
-            <select
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-            >
+            <select value={country} onChange={(e) => setCountry(e.target.value)}
+              className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">Select your country</option>
               {COUNTRIES.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
