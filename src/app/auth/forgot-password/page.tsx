@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Wallet, ArrowLeft, Loader2, Mail, CheckCircle } from 'lucide-react';
-import { createClient } from '../lib/supabase';
+import { createClient } from '../../lib/supabase';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -50,7 +50,6 @@ export default function ForgotPasswordPage() {
         </button>
 
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
-          {/* Header */}
           <div className="gradient-card p-8 text-white text-center">
             <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Wallet className="w-7 h-7 text-white" />
@@ -115,7 +114,6 @@ export default function ForgotPasswordPage() {
                 </form>
               </>
             ) : (
-              /* Success state */
               <div className="text-center py-4 space-y-4">
                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
                   <CheckCircle className="w-8 h-8 text-emerald-600" />
