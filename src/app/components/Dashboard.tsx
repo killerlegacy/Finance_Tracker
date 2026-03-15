@@ -27,6 +27,8 @@ export default function Dashboard({ transactions, budgets, subscriptions, accoun
   const expenses = monthlyTx.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const totalAccountBalance = accounts.reduce((s, a) => s + a.amount, 0);
   const totalBalance = totalAccountBalance + income - expenses;
+  // Savings = income minus expenses, but never negative (you can't save what you haven't earned)
+  const savings = income > 0 ? Math.max(0, income - expenses) : 0;
 
   const recent = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
   const upcomingBills = [...subscriptions].sort((a, b) => new Date(a.next_billing_date).getTime() - new Date(b.next_billing_date).getTime()).slice(0, 4);
@@ -61,7 +63,7 @@ export default function Dashboard({ transactions, budgets, subscriptions, accoun
             <span className="text-white/80 text-xs font-medium">Savings</span>
             <PiggyBank className="w-4 h-4 text-white/60" />
           </div>
-          <p className="text-2xl font-bold">{formatCurrency(income - expenses, currency)}</p>
+          <p className="text-2xl font-bold">{formatCurrency(savings, currency)}</p>
         </div>
       </div>
 
