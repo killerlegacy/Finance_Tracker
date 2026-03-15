@@ -1,8 +1,6 @@
 import { createClient } from './supabase';
 import { AnyRecord } from './types';
 
-// Each row in `records` table: { id, user_id, type, data (jsonb), created_at }
-
 export async function loadAllRecords(userId: string): Promise<AnyRecord[]> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -16,7 +14,6 @@ export async function loadAllRecords(userId: string): Promise<AnyRecord[]> {
     return [];
   }
 
-  // Each row's `data` field contains the full record object
   return (data || []).map((row) => ({
     ...row.data,
     id: row.id,
@@ -66,5 +63,15 @@ export async function upsertRecord(userId: string, record: AnyRecord): Promise<b
     data: record,
   });
   if (error) { console.error('upsertRecord error:', error); return false; }
+  return true;
+}
+
+export async function deleteAllUserRecords(userId: string): Promise<boolean> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('records')
+    .delete()
+    .eq('user_id', userId);
+  if (error) { console.error('deleteAllUserRecords error:', error); return false; }
   return true;
 }
