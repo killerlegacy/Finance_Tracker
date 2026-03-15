@@ -27,8 +27,8 @@ export async function registerUser(email: string, password: string, fullName: st
     return { ok: false, error: error.message };
   }
 
-  // When email confirmation is OFF, Supabase still returns a user object
-  // but identities will be empty if the email is already taken
+  // If email confirmation is OFF but email already exists,
+  // Supabase returns a user with empty identities array
   if (data.user && data.user.identities && data.user.identities.length === 0) {
     return { ok: false, error: 'An account with this email already exists. Please log in instead.' };
   }
@@ -44,7 +44,6 @@ export async function loginUser(email: string, password: string) {
   const supabase = createClient();
   const normalizedEmail = email.toLowerCase().trim();
 
-  // Step 1 — attempt login
   const { error } = await supabase.auth.signInWithPassword({
     email: normalizedEmail,
     password,
@@ -54,43 +53,19 @@ export async function loginUser(email: string, password: string) {
 
   const msg = error.message.toLowerCase();
 
-  // Step 2 — on credentials failure, check if the email exists
-  // by querying our records table for a profile with this email.
-  // This is safe because it only runs after a failed login attempt.
+  // Invalid credentials — Supabase intentionally returns the same error
+  // for both wrong password and non-existent email (security best practice).
+  // We cannot distinguish them without a separate authenticated query,
+  // so we show a clear, honest combined message.
   if (
     msg.includes('invalid login credentials') ||
     msg.includes('invalid credentials') ||
     error.code === 'invalid_credentials'
   ) {
-    try {
-      const { data: profileRows } = await supabase
-        .from('records')
-        .select('id')
-        .eq('type', 'profile')
-        .filter('data->>email', 'eq', normalizedEmail)
-        .limit(1);
-
-      const userExists = profileRows && profileRows.length > 0;
-
-      if (!userExists) {
-        return {
-          ok: false,
-          error: 'No account found with this email address. Please sign up to get started.',
-        };
-      }
-
-      // User exists but password was wrong
-      return {
-        ok: false,
-        error: 'Incorrect password. Please try again.',
-      };
-    } catch {
-      // If the check fails for any reason, fall back to a generic message
-      return {
-        ok: false,
-        error: 'Invalid email or password. Please check your details and try again.',
-      };
-    }
+    return {
+      ok: false,
+      error: 'Incorrect email or password. Please check your details and try again.',
+    };
   }
 
   if (msg.includes('email not confirmed')) {
@@ -114,7 +89,11 @@ export async function loginUser(email: string, password: string) {
     };
   }
 
-  return { ok: false, error: 'Login failed. Please check your details and try again.' };
+  // Fallback
+  return {
+    ok: false,
+    error: 'Login failed. Please check your details and try again.',
+  };
 }
 
 export async function logout() {
