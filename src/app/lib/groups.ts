@@ -130,12 +130,12 @@ export async function getGroupByInviteCode(code: string): Promise<Group | null> 
   const { data, error } = await supabase
     .from('groups')
     .select('*')
-    .eq('invite_code', code.toUpperCase())
+    .eq('invite_code', code.toUpperCase().trim())
     .eq('is_active', true)
-    .single();
+    .maybeSingle(); // ← was .single() which throws error on 0 rows
 
-  if (error) return null;
-  return data;
+  if (error) { console.error('getGroupByInviteCode:', error); return null; }
+  return data; // returns null if not found, no error thrown
 }
 
 export async function deleteGroup(groupId: string): Promise<boolean> {
@@ -182,7 +182,8 @@ export async function isAlreadyMember(groupId: string, userId: string): Promise<
     .select('id')
     .eq('group_id', groupId)
     .eq('user_id', userId)
-    .single();
+    .maybeSingle(); // ← was .single() which throws error on 0 rows
+
   return !!data;
 }
 
