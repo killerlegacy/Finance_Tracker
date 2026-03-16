@@ -293,52 +293,40 @@ export function calculateSettlements(
   if (members.length === 0 || expenses.length === 0) return [];
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
-  const fairShare = total / members.length;
+  const fairShare = Math.round((total / members.length) * 100) / 100;
 
-  // Step 1 — Calculate net balance for each member
-  // Positive = they are owed money (paid more than fair share)
-  // Negative = they owe money (paid less than fair share)
+  // Build net balance map — keyed by user_id
   const balances: Record<string, { name: string; balance: number }> = {};
-
-  // Start everyone at -fairShare (they owe their share)
   members.forEach((m) => {
-    balances[m.user_id] = { name: m.display_name, balance: -fairShare };
+    balances[m.user_id] = { name: m.display_name, balance: 0 };
   });
 
-  // Add back what each person actually paid
+  // Add what each person paid
   expenses.forEach((e) => {
     if (balances[e.paid_by]) {
       balances[e.paid_by].balance += e.amount;
     }
   });
 
-  // Step 2 — Round to 2 decimal places to avoid floating point issues
-  // e.g. -0.000000001 should be treated as 0
-  Object.keys(balances).forEach((uid) => {
-    balances[uid].balance = Math.round(balances[uid].balance * 100) / 100;
+  // Subtract their fair share
+  members.forEach((m) => {
+    balances[m.user_id].balance = Math.round((balances[m.user_id].balance - fairShare) * 100) / 100;
   });
 
-  // Step 3 — Separate into creditors and debtors
-  // At this point balances are already NETTED per person
-  // so there's no case where person A owes B AND B owes A
+  // Split into creditors (+) and debtors (-)
   const creditors: { id: string; name: string; amount: number }[] = [];
   const debtors: { id: string; name: string; amount: number }[] = [];
 
   Object.entries(balances).forEach(([uid, { name, balance }]) => {
-    if (balance > 0.01) {
-      creditors.push({ id: uid, name, amount: balance });
-    } else if (balance < -0.01) {
-      debtors.push({ id: uid, name, amount: -balance }); // store as positive
-    }
-    // balance ~0 means they paid exactly their fair share, skip
+    if (balance > 0.01) creditors.push({ id: uid, name, amount: balance });
+    else if (balance < -0.01) debtors.push({ id: uid, name, amount: -balance });
   });
 
-  // Sort largest first for optimal matching
+  // Sort largest first
   creditors.sort((a, b) => b.amount - a.amount);
   debtors.sort((a, b) => b.amount - a.amount);
 
-  // Step 4 — Greedy minimize transactions algorithm
-  // Match largest debtor with largest creditor each iteration
+  // Minimize transactions algorithm
   const settlements: SettlementDebt[] = [];
   let ci = 0;
   let di = 0;
@@ -368,6 +356,7 @@ export function calculateSettlements(
   return settlements;
 }
 
+
 export async function getGroupSettlements(groupId: string): Promise<GroupSettlement[]> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -386,42 +375,28 @@ export async function saveSettlements(
 ): Promise<boolean> {
   const supabase = createClient();
 
-  // Delete ALL unsettled settlements for this group before recalculating
-  // This prevents duplicates from accumulating on every expense change
-  const { error: deleteError } = await supabase
+  // Always wipe ALL unsettled first — no accumulation
+  await supabase
     .from('group_settlements')
     .delete()
     .eq('group_id', groupId)
     .eq('settled', false);
 
-  if (deleteError) {
-    console.error('saveSettlements delete error:', deleteError);
-    return false;
-  }
-
-  // If no new settlements needed, we're done
   if (settlements.length === 0) return true;
 
-  // Insert fresh calculated settlements
-  const { error: insertError } = await supabase
-    .from('group_settlements')
-    .insert(
-      settlements.map((s) => ({
-        group_id: groupId,
-        from_user_id: s.fromUserId,
-        from_user_name: s.fromUserName,
-        to_user_id: s.toUserId,
-        to_user_name: s.toUserName,
-        amount: s.amount,
-        settled: false,
-      }))
-    );
+  const { error } = await supabase.from('group_settlements').insert(
+    settlements.map((s) => ({
+      group_id: groupId,
+      from_user_id: s.fromUserId,
+      from_user_name: s.fromUserName,
+      to_user_id: s.toUserId,
+      to_user_name: s.toUserName,
+      amount: s.amount,
+      settled: false,
+    }))
+  );
 
-  if (insertError) {
-    console.error('saveSettlements insert error:', insertError);
-    return false;
-  }
-
+  if (error) { console.error('saveSettlements:', error); return false; }
   return true;
 }
 
