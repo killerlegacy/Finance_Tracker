@@ -386,28 +386,42 @@ export async function saveSettlements(
 ): Promise<boolean> {
   const supabase = createClient();
 
-  // Delete old unsettled settlements first
-  await supabase
+  // Delete ALL unsettled settlements for this group before recalculating
+  // This prevents duplicates from accumulating on every expense change
+  const { error: deleteError } = await supabase
     .from('group_settlements')
     .delete()
     .eq('group_id', groupId)
     .eq('settled', false);
 
+  if (deleteError) {
+    console.error('saveSettlements delete error:', deleteError);
+    return false;
+  }
+
+  // If no new settlements needed, we're done
   if (settlements.length === 0) return true;
 
-  const { error } = await supabase.from('group_settlements').insert(
-    settlements.map((s) => ({
-      group_id: groupId,
-      from_user_id: s.fromUserId,
-      from_user_name: s.fromUserName,
-      to_user_id: s.toUserId,
-      to_user_name: s.toUserName,
-      amount: s.amount,
-      settled: false,
-    }))
-  );
+  // Insert fresh calculated settlements
+  const { error: insertError } = await supabase
+    .from('group_settlements')
+    .insert(
+      settlements.map((s) => ({
+        group_id: groupId,
+        from_user_id: s.fromUserId,
+        from_user_name: s.fromUserName,
+        to_user_id: s.toUserId,
+        to_user_name: s.toUserName,
+        amount: s.amount,
+        settled: false,
+      }))
+    );
 
-  if (error) { console.error('saveSettlements:', error); return false; }
+  if (insertError) {
+    console.error('saveSettlements insert error:', insertError);
+    return false;
+  }
+
   return true;
 }
 
