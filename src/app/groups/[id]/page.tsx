@@ -89,45 +89,61 @@ export default function GroupDashboardPage() {
   };
 
   const handleAddExpense = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!expTitle.trim() || !expAmount) return;
-    setActionLoading(true);
-    const expense = await addGroupExpense({
-      group_id: groupId,
-      paid_by: userId,
-      paid_by_name: userName,
-      title: expTitle.trim(),
-      amount: parseFloat(expAmount),
-      category: expCategory,
-      split_type: 'equal',
-      date: expDate,
-      notes: expNotes,
-    });
-    if (expense) {
-      setExpenses((prev) => [expense, ...prev]);
-      // Recalculate and save settlements
-      const newExpenses = [expense, ...expenses];
-      const newSettlements = calculateSettlements(newExpenses, members);
-      await saveSettlements(groupId, newSettlements);
-      const s = await getGroupSettlements(groupId);
-      setSettlements(s);
-      setShowAddExpense(false);
-      setExpTitle(''); setExpAmount(''); setExpNotes('');
-      showToast('Expense added!');
-    }
-    setActionLoading(false);
-  };
+  e.preventDefault();
+  if (!expTitle.trim() || !expAmount) return;
+  setActionLoading(true);
 
-  const handleDeleteExpense = async (expId: string) => {
-    await deleteGroupExpense(expId);
-    const newExpenses = expenses.filter((e) => e.id !== expId);
+  const expense = await addGroupExpense({
+    group_id: groupId,
+    paid_by: userId,
+    paid_by_name: userName,
+    title: expTitle.trim(),
+    amount: parseFloat(expAmount),
+    category: expCategory,
+    split_type: 'equal',
+    date: expDate,
+    notes: expNotes,
+  });
+
+  if (expense) {
+    const newExpenses = [expense, ...expenses];
     setExpenses(newExpenses);
+
+    // Recalculate settlements from scratch using ALL expenses
+    // Only recalculate unsettled — settled ones stay as history
     const newSettlements = calculateSettlements(newExpenses, members);
     await saveSettlements(groupId, newSettlements);
+
+    // Reload settlements fresh from DB to get accurate state
     const s = await getGroupSettlements(groupId);
     setSettlements(s);
-    showToast('Expense deleted.');
-  };
+
+    setShowAddExpense(false);
+    setExpTitle('');
+    setExpAmount('');
+    setExpNotes('');
+    setExpCategory('Food');
+    showToast('Expense added!');
+  } else {
+    showToast('Failed to add expense. Please try again.');
+  }
+  setActionLoading(false);
+};
+
+  const handleDeleteExpense = async (expId: string) => {
+  await deleteGroupExpense(expId);
+  const newExpenses = expenses.filter((e) => e.id !== expId);
+  setExpenses(newExpenses);
+
+  // Recalculate from scratch with remaining expenses
+  const newSettlements = calculateSettlements(newExpenses, members);
+  await saveSettlements(groupId, newSettlements);
+
+  // Reload fresh
+  const s = await getGroupSettlements(groupId);
+  setSettlements(s);
+  showToast('Expense deleted.');
+};
 
   const handleMarkSettled = async (settlementId: string) => {
     if (myRole !== 'admin') { showToast('Only admins can mark settlements.'); return; }
