@@ -6,6 +6,8 @@ import { ArrowLeft, Hash, Loader2, Users, CheckCircle } from 'lucide-react';
 import { getSession } from '../../lib/auth';
 import { getGroupByInviteCode, joinGroup, isAlreadyMember, getGroupMembers } from '../../lib/groups';
 
+const PENDING_INVITE_KEY = 'ft_pending_invite';
+
 function JoinGroupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -15,22 +17,34 @@ function JoinGroupForm() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
-  const [groupPreview, setGroupPreview] = useState<{ name: string; description: string; memberCount: number; currency: string; id: string } | null>(null);
+  const [groupPreview, setGroupPreview] = useState<{
+    name: string;
+    description: string;
+    memberCount: number;
+    currency: string;
+    id: string;
+  } | null>(null);
 
   useEffect(() => {
+    const urlCode = searchParams.get('code');
+    if (urlCode) setCode(urlCode.toUpperCase());
+
     getSession().then((session) => {
       if (!session) {
-        const returnCode = searchParams.get('code');
-        router.replace(`/auth?mode=login${returnCode ? `&redirect=/groups/join?code=${returnCode}` : ''}`);
+        // Save invite code to localStorage so we can auto-join after auth+onboarding
+        if (urlCode) {
+          localStorage.setItem(PENDING_INVITE_KEY, urlCode.toUpperCase());
+        }
+        // Redirect to auth, after login they'll come back here
+        router.replace(`/auth?mode=login&redirect=/groups/join${urlCode ? `?code=${urlCode}` : ''}`);
         return;
       }
+
       setUserId(session.user.id);
       setUserName(session.user.user_metadata?.full_name || session.user.email || 'You');
 
-      // Auto-fill code from URL
-      const urlCode = searchParams.get('code');
+      // Auto-lookup if code is in URL
       if (urlCode) {
-        setCode(urlCode.toUpperCase());
         handleLookup(urlCode.toUpperCase(), session.user.id);
       }
     });
@@ -52,13 +66,19 @@ function JoinGroupForm() {
     const currentUserId = uid || userId;
     const alreadyIn = await isAlreadyMember(group.id, currentUserId);
     if (alreadyIn) {
-      setError('You are already a member of this group.');
-      setChecking(false);
+      // Already a member — just redirect to the group
+      router.replace(`/groups/${group.id}`);
       return;
     }
 
     const members = await getGroupMembers(group.id);
-    setGroupPreview({ name: group.name, description: group.description, memberCount: members.length, currency: group.currency, id: group.id });
+    setGroupPreview({
+      name: group.name,
+      description: group.description,
+      memberCount: members.length,
+      currency: group.currency,
+      id: group.id,
+    });
     setChecking(false);
   };
 
@@ -71,13 +91,18 @@ function JoinGroupForm() {
       setLoading(false);
       return;
     }
+    // Clear pending invite from localStorage
+    localStorage.removeItem(PENDING_INVITE_KEY);
     router.push(`/groups/${groupPreview.id}`);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <button onClick={() => router.push('/groups')} className="flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 transition-colors mb-6">
+        <button
+          onClick={() => router.push('/groups')}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 transition-colors mb-6"
+        >
           <ArrowLeft className="w-4 h-4" /> Back to groups
         </button>
 
@@ -113,10 +138,11 @@ function JoinGroupForm() {
             </div>
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">
+                {error}
+              </div>
             )}
 
-            {/* Group preview */}
             {groupPreview && (
               <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-200">
                 <div className="flex items-center gap-3">
@@ -125,7 +151,9 @@ function JoinGroupForm() {
                   </div>
                   <div>
                     <p className="font-semibold text-slate-800">{groupPreview.name}</p>
-                    {groupPreview.description && <p className="text-xs text-slate-500">{groupPreview.description}</p>}
+                    {groupPreview.description && (
+                      <p className="text-xs text-slate-500">{groupPreview.description}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-4 text-sm">
