@@ -164,12 +164,11 @@ function JoinGroupForm() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-4 text-sm">
+                <div className="flex gap-4 text-sm flex-wrap">
                   <div className="flex items-center gap-1.5 text-slate-600">
                     <Users className="w-4 h-4" />
                     <span>
-                      {groupPreview.memberCount} member
-                      {groupPreview.memberCount !== 1 ? 's' : ''}
+                      {groupPreview.memberCount} member{groupPreview.memberCount !== 1 ? 's' : ''} currently
                     </span>
                   </div>
                   <div className="text-slate-600">
@@ -178,7 +177,7 @@ function JoinGroupForm() {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 rounded-lg px-3 py-2">
                   <CheckCircle className="w-3.5 h-3.5" />
-                  Group found! Click below to join.
+                  Group found! You will be member #{groupPreview.memberCount + 1}.
                 </div>
               </div>
             )}
