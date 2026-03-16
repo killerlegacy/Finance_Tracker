@@ -6,6 +6,8 @@ import { Wallet, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react';
 import { loginUser, registerUser, getSession } from '../lib/auth';
 import { loadAllRecords } from '../lib/db';
 
+const PENDING_INVITE_KEY = 'ft_pending_invite';
+
 function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,6 +29,46 @@ function AuthForm() {
     });
   }, [router, searchParams]);
 
+  // After successful auth, figure out where to send the user
+  const handlePostAuth = async (isNewUser: boolean) => {
+    // New user always goes to onboarding (pending invite handled there)
+    if (isNewUser) {
+      router.push('/onboarding');
+      return;
+    }
+
+    // Existing user — check if they have a pending group invite
+    const pendingCode = localStorage.getItem(PENDING_INVITE_KEY);
+    if (pendingCode) {
+      // Redirect to join page with the code — it will auto-lookup
+      router.push(`/groups/join?code=${pendingCode}`);
+      return;
+    }
+
+    // Check redirect param in URL (e.g. ?redirect=/groups/join?code=XXX)
+    const redirectTo = searchParams.get('redirect');
+    if (redirectTo) {
+      router.push(redirectTo);
+      return;
+    }
+
+    // Normal login — check if onboarding is complete
+    const session = await getSession();
+    if (session) {
+      const records = await loadAllRecords(session.user.id);
+      const profile = records.find((d) => d.type === 'profile') as
+        | { onboarding_complete?: boolean }
+        | undefined;
+      if (profile?.onboarding_complete) {
+        router.push('/dashboard');
+      } else {
+        router.push('/onboarding');
+      }
+    } else {
+      router.push('/dashboard');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -38,9 +80,10 @@ function AuthForm() {
     }
 
     setLoading(true);
-    const result = mode === 'register'
-      ? await registerUser(email, password, fullName)
-      : await loginUser(email, password);
+    const result =
+      mode === 'register'
+        ? await registerUser(email, password, fullName)
+        : await loginUser(email, password);
 
     if (!result.ok) {
       setError(result.error || 'Something went wrong.');
@@ -48,28 +91,16 @@ function AuthForm() {
       return;
     }
 
-    if (mode === 'register') {
-      router.push('/onboarding');
-    } else {
-      const session = await getSession();
-      if (session) {
-        const records = await loadAllRecords(session.user.id);
-        const profile = records.find((d) => d.type === 'profile') as { onboarding_complete?: boolean } | undefined;
-        if (profile?.onboarding_complete) {
-          router.push('/dashboard');
-        } else {
-          router.push('/onboarding');
-        }
-      } else {
-        router.push('/dashboard');
-      }
-    }
+    await handlePostAuth(mode === 'register');
   };
 
   const switchMode = (m: 'login' | 'register') => {
     setMode(m);
     setError('');
-    setFullName(''); setEmail(''); setPassword(''); setConfirmPassword('');
+    setFullName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
   };
 
   if (loading) {
@@ -83,7 +114,10 @@ function AuthForm() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <button onClick={() => router.push('/landing')} className="flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 transition-colors mb-6">
+        <button
+          onClick={() => router.push('/landing')}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 transition-colors mb-6"
+        >
           <ArrowLeft className="w-4 h-4" /> Back to home
         </button>
 
@@ -100,10 +134,15 @@ function AuthForm() {
 
           <div className="flex border-b border-slate-100">
             {(['login', 'register'] as const).map((m) => (
-              <button key={m} onClick={() => switchMode(m)}
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
                 className={`flex-1 py-3.5 text-sm font-semibold transition-colors ${
-                  mode === m ? 'text-indigo-600 border-b-2 border-indigo-600 -mb-px' : 'text-slate-500 hover:text-slate-700'
-                }`}>
+                  mode === m
+                    ? 'text-indigo-600 border-b-2 border-indigo-600 -mb-px'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
                 {m === 'login' ? 'Log In' : 'Create Account'}
               </button>
             ))}
@@ -112,17 +151,31 @@ function AuthForm() {
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             {mode === 'register' && (
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Full Name</label>
-                <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} required
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
                   placeholder="e.g. Ali Hassan"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
               </div>
             )}
             <div>
-              <label className="text-sm font-medium text-slate-700 block mb-1.5">Email Address</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 placeholder="you@example.com"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -138,38 +191,61 @@ function AuthForm() {
                 )}
               </div>
               <div className="relative">
-                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
                   placeholder={mode === 'register' ? 'Min. 6 characters' : 'Your password'}
-                  className="w-full px-4 py-3 pr-11 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  className="w-full px-4 py-3 pr-11 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
             {mode === 'register' && (
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1.5">Confirm Password</label>
-                <input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required
+                <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                  Confirm Password
+                </label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
                   placeholder="Repeat your password"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3">
+                {error}
+              </div>
             )}
 
-            <button type="submit" disabled={loading}
-              className="w-full py-3.5 rounded-xl font-semibold text-white gradient-card hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 rounded-xl font-semibold text-white gradient-card hover:shadow-lg transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Create Account'}
             </button>
 
             <p className="text-center text-sm text-slate-500">
               {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-              <button type="button" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
-                className="text-indigo-600 font-semibold hover:underline">
+              <button
+                type="button"
+                onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+                className="text-indigo-600 font-semibold hover:underline"
+              >
                 {mode === 'login' ? 'Sign up free' : 'Log in'}
               </button>
             </p>
@@ -185,11 +261,13 @@ function AuthForm() {
 
 export default function AuthPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        </div>
+      }
+    >
       <AuthForm />
     </Suspense>
   );
