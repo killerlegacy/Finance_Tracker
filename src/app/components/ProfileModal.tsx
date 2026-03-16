@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Profile } from '../lib/types';
 import { COUNTRIES, generateId } from '../lib/constants';
+import { createClient } from '../lib/supabase';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -29,12 +30,20 @@ export default function ProfileModal({ isOpen, onClose, onSave, existingProfile 
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Also update Supabase auth user metadata so the name
+    // is consistent across auth session and all derived data
+    const supabase = createClient();
+    await supabase.auth.updateUser({
+      data: { full_name: fullName.trim() },
+    });
+
     onSave({
       id: existingProfile?.id || generateId(),
       type: 'profile',
-      full_name: fullName,
+      full_name: fullName.trim(),
       email,
       phone,
       country,
@@ -52,38 +61,58 @@ export default function ProfileModal({ isOpen, onClose, onSave, existingProfile 
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-semibold text-lg">Edit Profile</h3>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div>
             <label className="text-sm font-medium text-slate-700">Full Name</label>
-            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
               className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Enter your full name" />
+              placeholder="Enter your full name"
+            />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="your@email.com" />
+              placeholder="your@email.com"
+            />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Phone</label>
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
               className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Your phone number" />
+              placeholder="Your phone number"
+            />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700">Country</label>
-            <select value={country} onChange={(e) => setCountry(e.target.value)}
-              className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500">
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              className="w-full mt-1 px-4 py-3 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+            >
               <option value="">Select your country</option>
               {COUNTRIES.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
           </div>
-          <button type="submit" className="w-full py-3 rounded-xl font-medium text-white gradient-card hover:shadow-lg transition-all">
+          <button
+            type="submit"
+            className="w-full py-3 rounded-xl font-medium text-white gradient-card hover:shadow-lg transition-all"
+          >
             Save Profile
           </button>
         </form>
