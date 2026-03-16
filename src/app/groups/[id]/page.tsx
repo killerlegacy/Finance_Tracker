@@ -569,14 +569,6 @@ export default function GroupDashboardPage() {
           </div>
         )}
 
-            {!myRole || myRole !== 'admin' && pendingSettlements.length > 0 && (
-              <p className="text-center text-xs text-slate-400 bg-slate-50 rounded-xl py-3 px-4">
-                Only group admins can mark settlements as paid.
-              </p>
-            )}
-          </div>
-        )}
-
         {/* ── MEMBERS ── */}
         {tab === 'members' && (
           <div className="space-y-3">
