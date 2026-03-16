@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { type ReactNode } from 'react';
 import {
-  Wallet, Plus, LayoutDashboard, Receipt, CreditCard, Target, Repeat, User, LogOut, Loader2,
+  Wallet, Plus, LayoutDashboard, Receipt, CreditCard, Target, Repeat, User, LogOut, Loader2, Users,
 } from 'lucide-react';
 import { AnyRecord, Transaction, Account, Budget, Subscription, Profile, TabType } from '../lib/types';
 import { getSession, logout } from '../lib/auth';
