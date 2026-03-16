@@ -143,6 +143,15 @@ export default function DashboardPage() {
     { key: 'profile', label: 'Profile', icon: <User className="w-4 h-4 inline mr-1" /> },
   ];
 
+  // const tabs: { key: TabType; label: string; icon: ReactNode }[] = [
+  //   { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4 inline mr-1" /> },
+  //   { key: 'transactions', label: 'Transactions', icon: <Receipt className="w-4 h-4 inline mr-1" /> },
+  //   { key: 'accounts', label: 'Accounts', icon: <CreditCard className="w-4 h-4 inline mr-1" /> },
+  //   { key: 'budgets', label: 'Budgets', icon: <Target className="w-4 h-4 inline mr-1" /> },
+  //   { key: 'subscriptions', label: 'Subscriptions', icon: <Repeat className="w-4 h-4 inline mr-1" /> },
+  //   { key: 'profile', label: 'Profile', icon: <User className="w-4 h-4 inline mr-1" /> },
+  // ];
+
   if (!hydrated) {
     return (
       <div className="h-full flex items-center justify-center bg-slate-50">
@@ -175,6 +184,11 @@ export default function DashboardPage() {
             className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:shadow-lg transition-all">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add New</span>
+          </button>
+          <button onClick={() => router.push('/groups')}
+            className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-xl hover:border-indigo-300 transition-all">
+            <Users className="w-4 h-4" />
+            <span className="hidden sm:inline">Groups</span>
           </button>
           <div className="relative">
             <button onClick={() => setShowUserMenu(!showUserMenu)}
