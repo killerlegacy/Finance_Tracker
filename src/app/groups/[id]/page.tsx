@@ -415,81 +415,159 @@ export default function GroupDashboardPage() {
         {/* ── SETTLEMENTS ── */}
         {tab === 'settlements' && (
           <div className="space-y-4">
-            {pendingSettlements.length === 0 && settledSettlements.length === 0 ? (
-              <div className="text-center py-12">
-                <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 text-sm">No settlements yet. Add some expenses first.</p>
+        
+            {/* How it works explainer */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+              <p className="text-sm font-semibold text-indigo-800 mb-2">💡 How settlements work</p>
+              <p className="text-xs text-indigo-700 leading-relaxed">
+                Total group spend is divided equally. If you paid more than your share you are <span className="font-semibold text-emerald-700">owed money</span>. If you paid less you <span className="font-semibold text-red-600">owe money</span>. The list below shows the minimum payments needed to settle everything.
+              </p>
+            </div>
+        
+            {/* Member balance summary */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+              <h3 className="font-semibold text-slate-800 mb-3">Balance Summary</h3>
+              <div className="space-y-2">
+                {members.map((m) => {
+                  const paid = expenses.filter((e) => e.paid_by === m.user_id).reduce((s, e) => s + e.amount, 0);
+                  const share = members.length > 0 ? Math.round((totalSpent / members.length) * 100) / 100 : 0;
+                  const net = Math.round((paid - share) * 100) / 100;
+                  const isMe = m.user_id === userId;
+                  return (
+                    <div key={m.id} className={`flex items-center justify-between px-3 py-2.5 rounded-xl ${isMe ? 'bg-indigo-50 border border-indigo-100' : 'bg-slate-50'}`}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-sm shrink-0">
+                          {m.display_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-slate-800">{m.display_name}</span>
+                          {isMe && <span className="text-xs text-indigo-500 ml-1">(you)</span>}
+                          <p className="text-xs text-slate-500">Paid {fmt(paid)} · Share {fmt(share)}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-sm font-bold ${net > 0 ? 'text-emerald-600' : net < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                          {net > 0 ? `+${fmt(net)}` : net < 0 ? `-${fmt(Math.abs(net))}` : 'Settled ✓'}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {net > 0 ? 'is owed' : net < 0 ? 'owes' : ''}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ) : (
-              <>
-                {pendingSettlements.length > 0 && (
-                  <div>
-                    <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                      Pending
-                      <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full">{pendingSettlements.length}</span>
-                    </h3>
-                    <div className="space-y-2">
-                      {pendingSettlements.map((s) => (
-                        <div key={s.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-red-600">{s.from_user_name}</span>
-                                <span className="text-slate-400 text-sm">owes</span>
-                                <span className="font-semibold text-emerald-600">{s.to_user_name}</span>
+            </div>
+        
+            {/* Pending settlements */}
+            {pendingSettlements.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                    Payments Needed
+                    <span className="bg-red-100 text-red-600 text-xs px-2 py-0.5 rounded-full font-semibold">{pendingSettlements.length}</span>
+                  </h3>
+                  {myRole !== 'admin' && (
+                    <span className="text-xs text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">Admin settles only</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {pendingSettlements.map((s) => {
+                    const isFromMe = s.from_user_id === userId;
+                    const isToMe = s.to_user_id === userId;
+                    return (
+                      <div key={s.id} className={`bg-white rounded-2xl p-4 shadow-sm border ${isFromMe ? 'border-red-200 bg-red-50/30' : isToMe ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100'}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1">
+                            {/* Visual payment direction */}
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-semibold text-xs">
+                                  {s.from_user_name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className={`text-sm font-semibold ${isFromMe ? 'text-red-600' : 'text-slate-700'}`}>
+                                  {isFromMe ? 'You' : s.from_user_name}
+                                </span>
                               </div>
-                              <p className="text-lg font-bold text-slate-800 mt-1">{fmt(s.amount)}</p>
+                              <div className="flex items-center gap-1 text-slate-400">
+                                <div className="w-8 h-px bg-slate-300" />
+                                <span className="text-xs">pays</span>
+                                <div className="w-8 h-px bg-slate-300" />
+                                <span className="text-slate-500">→</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-semibold text-xs">
+                                  {s.to_user_name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className={`text-sm font-semibold ${isToMe ? 'text-emerald-600' : 'text-slate-700'}`}>
+                                  {isToMe ? 'You' : s.to_user_name}
+                                </span>
+                              </div>
                             </div>
-                            {myRole === 'admin' ? (
-                              <button
-                                onClick={() => handleMarkSettled(s.id)}
-                                disabled={actionLoading}
-                                className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-sm font-semibold hover:bg-emerald-600 transition-colors disabled:opacity-60 flex items-center gap-1.5"
-                              >
-                                {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                Settle
-                              </button>
-                            ) : (
-                              <div className="px-4 py-2 bg-slate-100 text-slate-400 rounded-xl text-xs font-medium cursor-not-allowed" title="Only admins can mark settlements">
-                                Admin only
-                              </div>
-                            )}
+                            <p className="text-xl font-bold text-slate-800">{fmt(s.amount)}</p>
+                            {isFromMe && <p className="text-xs text-red-500 mt-0.5">You need to pay this</p>}
+                            {isToMe && <p className="text-xs text-emerald-600 mt-0.5">You will receive this</p>}
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {settledSettlements.length > 0 && (
-                  <div>
-                    <h3 className="font-semibold text-slate-500 mb-3 text-sm flex items-center gap-2">
-                      Settled
-                      <span className="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded-full">{settledSettlements.length}</span>
-                    </h3>
-                    <div className="space-y-2">
-                      {settledSettlements.map((s) => (
-                        <div key={s.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-100 opacity-70">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap text-sm">
-                                <span className="font-medium text-slate-600">{s.from_user_name}</span>
-                                <span className="text-slate-400">paid</span>
-                                <span className="font-medium text-slate-600">{s.to_user_name}</span>
-                              </div>
-                              <p className="font-semibold text-slate-600 mt-0.5">{fmt(s.amount)}</p>
+        
+                          {myRole === 'admin' ? (
+                            <button
+                              onClick={() => handleMarkSettled(s.id)}
+                              disabled={actionLoading}
+                              className="shrink-0 px-4 py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-semibold hover:bg-emerald-600 transition-colors disabled:opacity-60 flex items-center gap-1.5"
+                            >
+                              {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              Settle
+                            </button>
+                          ) : (
+                            <div className="shrink-0 px-3 py-2 bg-slate-100 text-slate-400 rounded-xl text-xs text-center">
+                              <p>Admin</p>
+                              <p>only</p>
                             </div>
-                            <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl text-xs font-semibold">
-                              <Check className="w-3.5 h-3.5" /> Settled
-                            </div>
-                          </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
+        
+            {pendingSettlements.length === 0 && (
+              <div className="text-center py-8 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Check className="w-8 h-8 text-emerald-600" />
+                </div>
+                <p className="font-semibold text-slate-800">All settled up!</p>
+                <p className="text-sm text-slate-500 mt-1">No pending payments in this group.</p>
+              </div>
+            )}
+        
+            {/* Settled history */}
+            {settledSettlements.length > 0 && (
+              <div>
+                <h3 className="font-semibold text-slate-500 text-sm mb-3 flex items-center gap-2">
+                  Payment History
+                  <span className="bg-emerald-100 text-emerald-600 text-xs px-2 py-0.5 rounded-full">{settledSettlements.length}</span>
+                </h3>
+                <div className="space-y-2">
+                  {settledSettlements.map((s) => (
+                    <div key={s.id} className="bg-slate-50 rounded-2xl px-4 py-3 border border-slate-100 flex items-center justify-between opacity-70">
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
+                        <span className="font-medium text-slate-600">{s.from_user_id === userId ? 'You' : s.from_user_name}</span>
+                        <span className="text-slate-400 text-xs">paid</span>
+                        <span className="font-medium text-slate-600">{s.to_user_id === userId ? 'you' : s.to_user_name}</span>
+                        <span className="font-semibold text-slate-700">{fmt(s.amount)}</span>
+                      </div>
+                      <span className="shrink-0 flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                        <Check className="w-3 h-3" /> Paid
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
             {!myRole || myRole !== 'admin' && pendingSettlements.length > 0 && (
               <p className="text-center text-xs text-slate-400 bg-slate-50 rounded-xl py-3 px-4">
