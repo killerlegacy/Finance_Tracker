@@ -51,7 +51,6 @@ export default function DashboardPage() {
     setToastMsg(msg); setToastVisible(true);
   }, []);
 
-  // Auth + load data from Supabase
   useEffect(() => {
     getSession().then(async (session) => {
       if (!session) { router.replace('/auth'); return; }
@@ -62,7 +61,6 @@ export default function DashboardPage() {
 
       const records = await loadAllRecords(session.user.id);
 
-      // Check onboarding complete
       const profile = records.find((d) => d.type === 'profile') as Profile | undefined;
       if (!profile?.onboarding_complete) {
         router.replace('/onboarding');
@@ -80,7 +78,6 @@ export default function DashboardPage() {
     router.push('/landing');
   };
 
-  // Derived slices
   const transactions = allData.filter((d): d is Transaction => d.type === 'expense' || d.type === 'income');
   const accounts = allData.filter((d): d is Account => d.type === 'account');
   const budgets = allData.filter((d): d is Budget => d.type === 'budget');
@@ -143,15 +140,6 @@ export default function DashboardPage() {
     { key: 'profile', label: 'Profile', icon: <User className="w-4 h-4 inline mr-1" /> },
   ];
 
-  // const tabs: { key: TabType; label: string; icon: ReactNode }[] = [
-  //   { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4 inline mr-1" /> },
-  //   { key: 'transactions', label: 'Transactions', icon: <Receipt className="w-4 h-4 inline mr-1" /> },
-  //   { key: 'accounts', label: 'Accounts', icon: <CreditCard className="w-4 h-4 inline mr-1" /> },
-  //   { key: 'budgets', label: 'Budgets', icon: <Target className="w-4 h-4 inline mr-1" /> },
-  //   { key: 'subscriptions', label: 'Subscriptions', icon: <Repeat className="w-4 h-4 inline mr-1" /> },
-  //   { key: 'profile', label: 'Profile', icon: <User className="w-4 h-4 inline mr-1" /> },
-  // ];
-
   if (!hydrated) {
     return (
       <div className="h-full flex items-center justify-center bg-slate-50">
@@ -180,16 +168,21 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* ── NEW: Groups button ── */}
+          <button
+            onClick={() => router.push('/groups')}
+            className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-xl hover:border-indigo-300 transition-all"
+          >
+            <Users className="w-4 h-4" />
+            <span className="hidden sm:inline">Groups</span>
+          </button>
+
           <button onClick={() => setShowAddTx(true)}
             className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 sm:px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 hover:shadow-lg transition-all">
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add New</span>
           </button>
-          <button onClick={() => router.push('/groups')}
-            className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-xl hover:border-indigo-300 transition-all">
-            <Users className="w-4 h-4" />
-            <span className="hidden sm:inline">Groups</span>
-          </button>
+
           <div className="relative">
             <button onClick={() => setShowUserMenu(!showUserMenu)}
               className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-sm hover:bg-indigo-200 transition-colors">
@@ -232,7 +225,15 @@ export default function DashboardPage() {
         {currentTab === 'accounts' && <AccountsView accounts={accounts} currency={currency} onDelete={requestDelete} onAdd={() => setShowAccount(true)} />}
         {currentTab === 'budgets' && <BudgetsView budgets={budgets} transactions={transactions} currency={currency} onDelete={requestDelete} onAdd={() => setShowBudget(true)} />}
         {currentTab === 'subscriptions' && <SubscriptionsView subscriptions={subscriptions} currency={currency} onDelete={requestDelete} onAdd={() => setShowSubscription(true)} />}
-        {currentTab === 'profile' && <ProfileView profile={profile} currency={currency} userId={userId} onEdit={() => setShowProfile(true)} onCurrencyChange={(c) => { setCurrency(c); showToast(`Currency updated to ${c}`); }} />}
+        {currentTab === 'profile' && (
+          <ProfileView
+            profile={profile}
+            currency={currency}
+            userId={userId}
+            onEdit={() => setShowProfile(true)}
+            onCurrencyChange={(c) => { setCurrency(c); showToast(`Currency updated to ${c}`); }}
+          />
+        )}
       </main>
 
       {/* Modals */}
