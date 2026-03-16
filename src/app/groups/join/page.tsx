@@ -6,7 +6,7 @@ import { ArrowLeft, Hash, Loader2, Users, CheckCircle } from 'lucide-react';
 import { getSession } from '../../lib/auth';
 import { getGroupByInviteCode, joinGroup, isAlreadyMember, getGroupMembers } from '../../lib/groups';
 
-export const PENDING_INVITE_KEY = 'ft_pending_invite';
+const PENDING_INVITE_KEY = 'ft_pending_invite';
 
 function JoinGroupForm() {
   const router = useRouter();
