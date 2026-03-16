@@ -48,7 +48,6 @@ export interface GroupSettlement {
   created_at: string;
 }
 
-// Generate a random 6-char invite code like "STU-X4K"
 export function generateInviteCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -91,10 +90,22 @@ export async function createGroup(
 
 export async function getMyGroups(userId: string): Promise<Group[]> {
   const supabase = createClient();
+
+  // Step 1 — get the group IDs this user belongs to
+  const { data: memberRows, error: memberError } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', userId);
+
+  if (memberError || !memberRows || memberRows.length === 0) return [];
+
+  const groupIds = memberRows.map((r) => r.group_id);
+
+  // Step 2 — fetch those groups using a plain array
   const { data, error } = await supabase
     .from('groups')
     .select('*')
-    .in('id', supabase.from('group_members').select('group_id').eq('user_id', userId))
+    .in('id', groupIds)
     .eq('is_active', true)
     .order('created_at', { ascending: false });
 
@@ -204,13 +215,12 @@ export async function removeMember(groupId: string, targetUserId: string): Promi
 export async function leaveGroup(groupId: string, userId: string): Promise<boolean> {
   const supabase = createClient();
 
-  // If user is the only admin, auto-promote the oldest member first
   const members = await getGroupMembers(groupId);
   const admins = members.filter((m) => m.role === 'admin');
   const isAdmin = admins.some((m) => m.user_id === userId);
 
+  // If leaving user is the only admin, promote the next oldest member
   if (isAdmin && admins.length === 1 && members.length > 1) {
-    // Promote the next oldest member who is not the current user
     const nextMember = members.find((m) => m.user_id !== userId);
     if (nextMember) await updateMemberRole(groupId, nextMember.user_id, 'admin');
   }
@@ -244,7 +254,9 @@ export async function getGroupExpenses(groupId: string): Promise<GroupExpense[]>
   return data || [];
 }
 
-export async function addGroupExpense(expense: Omit<GroupExpense, 'id' | 'created_at'>): Promise<GroupExpense | null> {
+export async function addGroupExpense(
+  expense: Omit<GroupExpense, 'id' | 'created_at'>
+): Promise<GroupExpense | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('group_expenses')
@@ -273,7 +285,6 @@ export interface SettlementDebt {
   amount: number;
 }
 
-// Core algorithm: minimize number of transactions to settle all debts
 export function calculateSettlements(
   expenses: GroupExpense[],
   members: GroupMember[]
@@ -283,7 +294,6 @@ export function calculateSettlements(
   const total = expenses.reduce((s, e) => s + e.amount, 0);
   const fairShare = total / members.length;
 
-  // Net balance per user: positive = owed money, negative = owes money
   const balances: Record<string, { name: string; balance: number }> = {};
   members.forEach((m) => {
     balances[m.user_id] = { name: m.display_name, balance: -fairShare };
@@ -295,7 +305,6 @@ export function calculateSettlements(
     }
   });
 
-  // Separate into creditors (owed money) and debtors (owe money)
   const creditors = Object.entries(balances)
     .filter(([, v]) => v.balance > 0.01)
     .map(([id, v]) => ({ id, name: v.name, amount: v.balance }))
@@ -352,6 +361,7 @@ export async function saveSettlements(
   settlements: SettlementDebt[]
 ): Promise<boolean> {
   const supabase = createClient();
+
   // Delete old unsettled settlements first
   await supabase
     .from('group_settlements')
