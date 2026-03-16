@@ -417,3 +417,31 @@ export async function markSettled(
   if (error) { console.error('markSettled:', error); return false; }
   return true;
 }
+// Sync updated display name across all group tables when user changes their profile name
+export async function syncUserNameInGroups(userId: string, newName: string): Promise<void> {
+  const supabase = createClient();
+
+  // Update display_name in group_members
+  await supabase
+    .from('group_members')
+    .update({ display_name: newName })
+    .eq('user_id', userId);
+
+  // Update paid_by_name in group_expenses
+  await supabase
+    .from('group_expenses')
+    .update({ paid_by_name: newName })
+    .eq('paid_by', userId);
+
+  // Update from_user_name in settlements
+  await supabase
+    .from('group_settlements')
+    .update({ from_user_name: newName })
+    .eq('from_user_id', userId);
+
+  // Update to_user_name in settlements
+  await supabase
+    .from('group_settlements')
+    .update({ to_user_name: newName })
+    .eq('to_user_id', userId);
+}
