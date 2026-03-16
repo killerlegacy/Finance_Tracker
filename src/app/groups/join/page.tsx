@@ -6,7 +6,7 @@ import { ArrowLeft, Hash, Loader2, Users, CheckCircle } from 'lucide-react';
 import { getSession } from '../../lib/auth';
 import { getGroupByInviteCode, joinGroup, isAlreadyMember, getGroupMembers } from '../../lib/groups';
 
-const PENDING_INVITE_KEY = 'ft_pending_invite';
+export const PENDING_INVITE_KEY = 'ft_pending_invite';
 
 function JoinGroupForm() {
   const router = useRouter();
@@ -27,23 +27,29 @@ function JoinGroupForm() {
 
   useEffect(() => {
     const urlCode = searchParams.get('code');
-    if (urlCode) setCode(urlCode.toUpperCase());
+
+    // Save invite code to localStorage IMMEDIATELY before any async work
+    // This ensures it's available regardless of auth state or redirect flow
+    if (urlCode) {
+      setCode(urlCode.toUpperCase());
+      localStorage.setItem(PENDING_INVITE_KEY, urlCode.toUpperCase());
+    }
 
     getSession().then((session) => {
       if (!session) {
-        // Save invite code to localStorage so we can auto-join after auth+onboarding
-        if (urlCode) {
-          localStorage.setItem(PENDING_INVITE_KEY, urlCode.toUpperCase());
-        }
-        // Redirect to auth, after login they'll come back here
-        router.replace(`/auth?mode=login&redirect=/groups/join${urlCode ? `?code=${urlCode}` : ''}`);
+        // Not logged in — redirect to auth, code is already saved in localStorage
+        router.replace(
+          `/auth?mode=login&redirect=/groups/join${urlCode ? `?code=${urlCode}` : ''}`
+        );
         return;
       }
 
       setUserId(session.user.id);
-      setUserName(session.user.user_metadata?.full_name || session.user.email || 'You');
+      setUserName(
+        session.user.user_metadata?.full_name || session.user.email || 'You'
+      );
 
-      // Auto-lookup if code is in URL
+      // Auto-lookup group if code came from URL
       if (urlCode) {
         handleLookup(urlCode.toUpperCase(), session.user.id);
       }
@@ -66,7 +72,8 @@ function JoinGroupForm() {
     const currentUserId = uid || userId;
     const alreadyIn = await isAlreadyMember(group.id, currentUserId);
     if (alreadyIn) {
-      // Already a member — just redirect to the group
+      // Already a member — clear pending invite and go straight to group
+      localStorage.removeItem(PENDING_INVITE_KEY);
       router.replace(`/groups/${group.id}`);
       return;
     }
@@ -91,7 +98,6 @@ function JoinGroupForm() {
       setLoading(false);
       return;
     }
-    // Clear pending invite from localStorage
     localStorage.removeItem(PENDING_INVITE_KEY);
     router.push(`/groups/${groupPreview.id}`);
   };
@@ -117,7 +123,9 @@ function JoinGroupForm() {
 
           <div className="p-6 space-y-4">
             <div>
-              <label className="text-sm font-medium text-slate-700 block mb-1.5">Invite Code</label>
+              <label className="text-sm font-medium text-slate-700 block mb-1.5">
+                Invite Code
+              </label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -159,7 +167,10 @@ function JoinGroupForm() {
                 <div className="flex gap-4 text-sm">
                   <div className="flex items-center gap-1.5 text-slate-600">
                     <Users className="w-4 h-4" />
-                    <span>{groupPreview.memberCount} member{groupPreview.memberCount !== 1 ? 's' : ''}</span>
+                    <span>
+                      {groupPreview.memberCount} member
+                      {groupPreview.memberCount !== 1 ? 's' : ''}
+                    </span>
                   </div>
                   <div className="text-slate-600">
                     Currency: <span className="font-semibold">{groupPreview.currency}</span>
@@ -191,11 +202,13 @@ function JoinGroupForm() {
 
 export default function JoinGroupPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+        </div>
+      }
+    >
       <JoinGroupForm />
     </Suspense>
   );
