@@ -9,6 +9,7 @@ import {
 import { AnyRecord, Transaction, Account, Budget, Subscription, Profile, TabType } from '../lib/types';
 import { getSession, logout } from '../lib/auth';
 import { loadAllRecords, createRecord, updateRecord, deleteRecord } from '../lib/db';
+import { syncUserNameInGroups } from '../lib/groups';
 
 import Toast from '../components/Toast';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
@@ -103,6 +104,14 @@ export default function DashboardPage() {
         return [...prev, p];
       });
       if (p.currency) setCurrency(p.currency);
+
+      // ── Sync name across all group tables if name changed ──
+      const oldName = profile?.full_name || '';
+      const newName = p.full_name || '';
+      if (newName && newName !== oldName) {
+        setUserName(newName);
+        await syncUserNameInGroups(userId, newName);
+      }
     } else {
       showToast('Failed to save profile.');
     }
@@ -168,7 +177,7 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* ── NEW: Groups button ── */}
+          {/* Groups button */}
           <button
             onClick={() => router.push('/groups')}
             className="flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 border border-slate-200 px-3 py-2 rounded-xl hover:border-indigo-300 transition-all"
