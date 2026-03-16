@@ -102,48 +102,74 @@ export default function OnboardingPage() {
   };
 
   const handleFinish = async () => {
-    setSaving(true);
-    setError('');
+  setSaving(true);
+  setError('');
 
-    // Save profile
-    const profile: Profile = {
-      id: generateId(),
-      type: 'profile',
-      full_name: userName,
-      email: userEmail,
-      phone,
-      country,
-      currency,
-      monthly_income: incomeRange,
-      financial_goal: financialGoal,
-      onboarding_complete: true,
-      created_at: new Date().toISOString(),
-    };
-
-    const profileOk = await createRecord(userId, profile);
-    if (!profileOk) {
-      setError('Failed to save profile. Please try again.');
-      setSaving(false);
-      return;
-    }
-
-    // Save valid accounts
-    const validAccounts = accounts.filter((a) => a.name.trim() && a.balance !== '' && !isNaN(parseFloat(a.balance)));
-    for (const acc of validAccounts) {
-      const accountRecord: Account = {
-        id: generateId(),
-        type: 'account',
-        service_name: acc.name.trim(),
-        category: acc.type,
-        amount: parseFloat(acc.balance),
-        created_at: new Date().toISOString(),
-      };
-      await createRecord(userId, accountRecord);
-    }
-
-    router.push('/dashboard');
+  const profile: Profile = {
+    id: generateId(),
+    type: 'profile',
+    full_name: userName,
+    email: userEmail,
+    phone,
+    country,
+    currency,
+    monthly_income: incomeRange,
+    financial_goal: financialGoal,
+    onboarding_complete: true,
+    created_at: new Date().toISOString(),
   };
 
+  const profileOk = await createRecord(userId, profile);
+  if (!profileOk) {
+    setError('Failed to save profile. Please try again.');
+    setSaving(false);
+    return;
+  }
+
+  // Save valid accounts
+  const validAccounts = accounts.filter(
+    (a) => a.name.trim() && a.balance !== '' && !isNaN(parseFloat(a.balance))
+  );
+  for (const acc of validAccounts) {
+    const accountRecord: Account = {
+      id: generateId(),
+      type: 'account',
+      service_name: acc.name.trim(),
+      category: acc.type,
+      amount: parseFloat(acc.balance),
+      created_at: new Date().toISOString(),
+    };
+    await createRecord(userId, accountRecord);
+  }
+
+  // Check if there's a pending group invite saved before auth
+  const pendingInviteCode = localStorage.getItem('ft_pending_invite');
+  if (pendingInviteCode) {
+    try {
+      // Dynamically import to avoid circular deps
+      const { getGroupByInviteCode, joinGroup, isAlreadyMember } = await import('../lib/groups');
+      const group = await getGroupByInviteCode(pendingInviteCode);
+      if (group) {
+        const alreadyIn = await isAlreadyMember(group.id, userId);
+        if (!alreadyIn) {
+          await joinGroup(group.id, userId, userName);
+        }
+        localStorage.removeItem('ft_pending_invite');
+        setSaving(false);
+        // Redirect straight to the group they were invited to
+        router.push(`/groups/${group.id}`);
+        return;
+      }
+    } catch (err) {
+      console.error('Auto-join error:', err);
+      // If auto-join fails, just clear it and go to dashboard normally
+    }
+    localStorage.removeItem('ft_pending_invite');
+  }
+
+  setSaving(false);
+  router.push('/dashboard');
+};
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
