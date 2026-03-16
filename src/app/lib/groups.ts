@@ -295,27 +295,50 @@ export function calculateSettlements(
   const total = expenses.reduce((s, e) => s + e.amount, 0);
   const fairShare = total / members.length;
 
+  // Step 1 — Calculate net balance for each member
+  // Positive = they are owed money (paid more than fair share)
+  // Negative = they owe money (paid less than fair share)
   const balances: Record<string, { name: string; balance: number }> = {};
+
+  // Start everyone at -fairShare (they owe their share)
   members.forEach((m) => {
     balances[m.user_id] = { name: m.display_name, balance: -fairShare };
   });
 
+  // Add back what each person actually paid
   expenses.forEach((e) => {
     if (balances[e.paid_by]) {
       balances[e.paid_by].balance += e.amount;
     }
   });
 
-  const creditors = Object.entries(balances)
-    .filter(([, v]) => v.balance > 0.01)
-    .map(([id, v]) => ({ id, name: v.name, amount: v.balance }))
-    .sort((a, b) => b.amount - a.amount);
+  // Step 2 — Round to 2 decimal places to avoid floating point issues
+  // e.g. -0.000000001 should be treated as 0
+  Object.keys(balances).forEach((uid) => {
+    balances[uid].balance = Math.round(balances[uid].balance * 100) / 100;
+  });
 
-  const debtors = Object.entries(balances)
-    .filter(([, v]) => v.balance < -0.01)
-    .map(([id, v]) => ({ id, name: v.name, amount: -v.balance }))
-    .sort((a, b) => b.amount - a.amount);
+  // Step 3 — Separate into creditors and debtors
+  // At this point balances are already NETTED per person
+  // so there's no case where person A owes B AND B owes A
+  const creditors: { id: string; name: string; amount: number }[] = [];
+  const debtors: { id: string; name: string; amount: number }[] = [];
 
+  Object.entries(balances).forEach(([uid, { name, balance }]) => {
+    if (balance > 0.01) {
+      creditors.push({ id: uid, name, amount: balance });
+    } else if (balance < -0.01) {
+      debtors.push({ id: uid, name, amount: -balance }); // store as positive
+    }
+    // balance ~0 means they paid exactly their fair share, skip
+  });
+
+  // Sort largest first for optimal matching
+  creditors.sort((a, b) => b.amount - a.amount);
+  debtors.sort((a, b) => b.amount - a.amount);
+
+  // Step 4 — Greedy minimize transactions algorithm
+  // Match largest debtor with largest creditor each iteration
   const settlements: SettlementDebt[] = [];
   let ci = 0;
   let di = 0;
@@ -323,7 +346,7 @@ export function calculateSettlements(
   while (ci < creditors.length && di < debtors.length) {
     const creditor = creditors[ci];
     const debtor = debtors[di];
-    const amount = Math.min(creditor.amount, debtor.amount);
+    const amount = Math.round(Math.min(creditor.amount, debtor.amount) * 100) / 100;
 
     if (amount > 0.01) {
       settlements.push({
@@ -331,12 +354,12 @@ export function calculateSettlements(
         fromUserName: debtor.name,
         toUserId: creditor.id,
         toUserName: creditor.name,
-        amount: Math.round(amount * 100) / 100,
+        amount,
       });
     }
 
-    creditor.amount -= amount;
-    debtor.amount -= amount;
+    creditor.amount = Math.round((creditor.amount - amount) * 100) / 100;
+    debtor.amount = Math.round((debtor.amount - amount) * 100) / 100;
 
     if (creditor.amount < 0.01) ci++;
     if (debtor.amount < 0.01) di++;
