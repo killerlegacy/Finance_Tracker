@@ -95,27 +95,27 @@ export default function DashboardPage() {
   };
 
   const upsertProfile = async (p: Profile) => {
-    const existing = allData.find((d) => d.type === 'profile');
-    const ok = existing ? await updateRecord(userId, p) : await createRecord(userId, p);
-    if (ok) {
-      setAllData((prev) => {
-        const hasProfile = prev.find((d) => d.type === 'profile');
-        if (hasProfile) return prev.map((d) => (d.type === 'profile' ? p : d));
-        return [...prev, p];
-      });
-      if (p.currency) setCurrency(p.currency);
+  const existing = allData.find((d) => d.type === 'profile');
+  const ok = existing ? await updateRecord(userId, p) : await createRecord(userId, p);
+  if (ok) {
+    setAllData((prev) => {
+      const hasProfile = prev.find((d) => d.type === 'profile');
+      if (hasProfile) return prev.map((d) => (d.type === 'profile' ? p : d));
+      return [...prev, p];
+    });
+    if (p.currency) setCurrency(p.currency);
 
-      // ── Sync name across all group tables if name changed ──
-      const oldName = profile?.full_name || '';
-      const newName = p.full_name || '';
-      if (newName && newName !== oldName) {
-        setUserName(newName);
-        await syncUserNameInGroups(userId, newName);
-      }
-    } else {
-      showToast('Failed to save profile.');
+    // Always sync name across all group tables when profile is saved
+    // This keeps group_members, group_expenses and group_settlements in sync
+    if (p.full_name) {
+      setUserName(p.full_name);
+      await syncUserNameInGroups(userId, p.full_name);
     }
-  };
+  } else {
+    showToast('Failed to save profile.');
+  }
+};
+
 
   const requestDelete = (item: AnyRecord) => {
     setDeleteTarget(item); setShowDelete(true);
