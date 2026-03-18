@@ -276,30 +276,33 @@ export default function GroupDashboardPage() {
   };
 
   const handleCreateSettlement = async () => {
-    if (activeRound) {
-      showToast('There is already an active settlement. Settle or delete it first.');
-      return;
-    }
-    setActionLoading(true);
-    const expiresAt = settleExpiry > 0
-      ? new Date(Date.now() + settleExpiry * 60 * 60 * 1000).toISOString()
-      : null;
-    const round = await createSettlementRound(
-      groupId, settleDateFrom, settleDateTo, expiresAt,
-      userId, userName, expenses, members
-    );
-    if (round) {
-      setActiveRound(round);
-      const settlements = await getSettlementsForRound(round.id);
-      setActiveSettlements(settlements);
-      setRounds(await getSettlementRounds(groupId));
-      setShowCreateSettlement(false);
-      showToast(`Settlement Round #${round.round_number} created!`);
-    } else {
-      showToast('Failed to create settlement.');
-    }
-    setActionLoading(false);
-  };
+  if (activeRound) {
+    showToast('There is already an active settlement. Settle or delete it first.');
+    return;
+  }
+  setActionLoading(true);
+  const expiresAt = settleExpiry > 0
+    ? new Date(Date.now() + settleExpiry * 60 * 60 * 1000).toISOString()
+    : null;
+
+  // Pass completedRounds so createSettlementRound can exclude already-settled expenses
+  const round = await createSettlementRound(
+    groupId, settleDateFrom, settleDateTo, expiresAt,
+    userId, userName, expenses, members, completedRounds  // ← added completedRounds
+  );
+
+  if (round) {
+    setActiveRound(round);
+    const settlements = await getSettlementsForRound(round.id);
+    setActiveSettlements(settlements);
+    setRounds(await getSettlementRounds(groupId));
+    setShowCreateSettlement(false);
+    showToast(`Settlement Round #${round.round_number} created!`);
+  } else {
+    showToast('Failed to create settlement.');
+  }
+  setActionLoading(false);
+};
 
   const handleMarkSettled = async (settlement: GroupSettlement) => {
     if (myRole !== 'admin') { showToast('Only admins can mark settlements.'); return; }
