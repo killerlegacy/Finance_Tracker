@@ -478,7 +478,8 @@ export async function createSettlementRound(
   createdBy: string,
   createdByName: string,
   expenses: GroupExpense[],
-  members: GroupMember[]
+  members: GroupMember[],
+  completedRounds: GroupSettlementRound[]
 ): Promise<GroupSettlementRound | null> {
   const supabase = createClient();
 
@@ -487,10 +488,18 @@ export async function createSettlementRound(
     .order('round_number', { ascending: false }).limit(1).maybeSingle();
   const roundNumber = (existing?.round_number || 0) + 1;
 
-  // Only approved expenses in date range
-  const rangeExpenses = expenses.filter(
-    (e) => e.status === 'approved' && e.date >= dateFrom && e.date <= dateTo
+  // The round will be created NOW — capture this timestamp
+  const nowTimestamp = new Date().toISOString();
+
+  // Use getUnsettledExpenses to get ONLY expenses not covered by previous rounds
+  // This is the same logic as the overview balance — ensures consistency
+  const unsettledApprovedExpenses = getUnsettledExpenses(expenses, completedRounds);
+
+  // Further filter to the selected date range
+  const rangeExpenses = unsettledApprovedExpenses.filter(
+    (e) => e.date >= dateFrom && e.date <= dateTo
   );
+
   const totalAmount = rangeExpenses.reduce((s, e) => s + e.amount, 0);
 
   const { data: round, error: roundError } = await supabase
@@ -506,11 +515,14 @@ export async function createSettlementRound(
       status: 'active',
       total_amount: totalAmount,
       member_count: members.length,
+      created_at: nowTimestamp,
     })
     .select().single();
 
   if (roundError || !round) { console.error('createSettlementRound:', roundError); return null; }
 
+  // Calculate settlements using ONLY the unsettled expenses in range
+  // This matches exactly what the overview balance shows
   const balances = calculateNetBalances(rangeExpenses, members);
   const debts = calculateSettlementsFromBalances(balances);
 
