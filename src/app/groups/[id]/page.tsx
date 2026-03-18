@@ -62,7 +62,13 @@ export default function GroupDashboardPage() {
   const [expTitle, setExpTitle] = useState('');
   const [expAmount, setExpAmount] = useState('');
   const [expCategory, setExpCategory] = useState('Food');
-  const [expDate, setExpDate] = useState(new Date().toISOString().split('T')[0]);
+  const [expDate, setExpDate] = useState(() => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+});
   const [expNotes, setExpNotes] = useState('');
   const [expSplitType, setExpSplitType] = useState<'equal' | 'exact' | 'percentage'>('equal');
   const [expParticipants, setExpParticipants] = useState<string[]>([]);
@@ -76,7 +82,13 @@ export default function GroupDashboardPage() {
   // Create settlement modal
   const [showCreateSettlement, setShowCreateSettlement] = useState(false);
   const [settleDateFrom, setSettleDateFrom] = useState('');
-  const [settleDateTo, setSettleDateTo] = useState(new Date().toISOString().split('T')[0]);
+  const [settleDateTo, setSettleDateTo] = useState(() => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+});
   const [settleExpiry, setSettleExpiry] = useState(24);
 
   // Delete/leave modals
@@ -109,13 +121,15 @@ export default function GroupDashboardPage() {
     if (me) setMyRole(me.role);
 
     // Default date_from for settlement
-    const completedRounds = r.filter((round) => round.status === 'completed');
-    const lastCompleted = completedRounds[0];
+    const completedRoundsForDate = r.filter((round) => round.status === 'completed');
+    const lastCompleted = completedRoundsForDate[0]; // already sorted by round_number desc
     if (lastCompleted) {
-      const nextDay = new Date(lastCompleted.date_to);
-      nextDay.setDate(nextDay.getDate() + 1);
-      setSettleDateFrom(nextDay.toISOString().split('T')[0]);
+      // Start from the same date as last round's date_to
+      // New expenses on that date added AFTER the round will still appear
+      // because getUnsettledExpenses uses created_at timestamps
+      setSettleDateFrom(lastCompleted.date_to);
     } else {
+      // No completed rounds — start from group creation date
       setSettleDateFrom(g.created_at.split('T')[0]);
     }
 
