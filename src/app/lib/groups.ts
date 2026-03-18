@@ -28,15 +28,39 @@ export interface GroupExpense {
   title: string;
   amount: number;
   category: string;
-  split_type: string;
+  split_type: 'equal' | 'exact' | 'percentage';
+  participants: string[]; // user_ids — empty means all members
+  split_details: SplitDetail[]; // for exact/percentage splits
   date: string;
   notes: string;
+  created_at: string;
+}
+
+export interface SplitDetail {
+  user_id: string;
+  user_name: string;
+  amount: number; // actual amount for exact, percentage value for percentage split
+}
+
+export interface GroupSettlementRound {
+  id: string;
+  group_id: string;
+  round_number: number;
+  date_from: string;
+  date_to: string;
+  expires_at: string | null;
+  created_by: string;
+  created_by_name: string;
+  status: 'active' | 'completed' | 'expired' | 'deleted';
+  total_amount: number;
+  member_count: number;
   created_at: string;
 }
 
 export interface GroupSettlement {
   id: string;
   group_id: string;
+  round_id: string;
   from_user_id: string;
   from_user_name: string;
   to_user_id: string;
@@ -47,6 +71,30 @@ export interface GroupSettlement {
   settled_at: string | null;
   created_at: string;
 }
+
+export interface GroupPayment {
+  id: string;
+  group_id: string;
+  settlement_id: string;
+  round_id: string;
+  from_user_id: string;
+  from_user_name: string;
+  to_user_id: string;
+  to_user_name: string;
+  amount: number;
+  settled_by: string;
+  settled_at: string;
+}
+
+export interface SettlementDebt {
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  amount: number;
+}
+
+// ── Invite code ──────────────────────────────────────────
 
 export function generateInviteCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -77,7 +125,6 @@ export async function createGroup(
 
   if (error || !group) { console.error('createGroup:', error); return null; }
 
-  // Add creator as admin
   await supabase.from('group_members').insert({
     group_id: group.id,
     user_id: userId,
@@ -90,18 +137,14 @@ export async function createGroup(
 
 export async function getMyGroups(userId: string): Promise<Group[]> {
   const supabase = createClient();
-
-  // Step 1 — get the group IDs this user belongs to
   const { data: memberRows, error: memberError } = await supabase
     .from('group_members')
     .select('group_id')
     .eq('user_id', userId);
 
   if (memberError || !memberRows || memberRows.length === 0) return [];
-
   const groupIds = memberRows.map((r) => r.group_id);
 
-  // Step 2 — fetch those groups using a plain array
   const { data, error } = await supabase
     .from('groups')
     .select('*')
@@ -116,26 +159,20 @@ export async function getMyGroups(userId: string): Promise<Group[]> {
 export async function getGroup(groupId: string): Promise<Group | null> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('groups')
-    .select('*')
-    .eq('id', groupId)
-    .single();
-
-  if (error) { console.error('getGroup:', error); return null; }
+    .from('groups').select('*').eq('id', groupId).single();
+  if (error) return null;
   return data;
 }
 
 export async function getGroupByInviteCode(code: string): Promise<Group | null> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('groups')
-    .select('*')
+    .from('groups').select('*')
     .eq('invite_code', code.toUpperCase().trim())
     .eq('is_active', true)
-    .maybeSingle(); // ← was .single() which throws error on 0 rows
-
-  if (error) { console.error('getGroupByInviteCode:', error); return null; }
-  return data; // returns null if not found, no error thrown
+    .maybeSingle();
+  if (error) return null;
+  return data;
 }
 
 export async function deleteGroup(groupId: string): Promise<boolean> {
@@ -150,26 +187,16 @@ export async function deleteGroup(groupId: string): Promise<boolean> {
 export async function getGroupMembers(groupId: string): Promise<GroupMember[]> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('group_members')
-    .select('*')
-    .eq('group_id', groupId)
+    .from('group_members').select('*').eq('group_id', groupId)
     .order('joined_at', { ascending: true });
-
-  if (error) { console.error('getGroupMembers:', error); return []; }
+  if (error) return [];
   return data || [];
 }
 
-export async function joinGroup(
-  groupId: string,
-  userId: string,
-  displayName: string
-): Promise<boolean> {
+export async function joinGroup(groupId: string, userId: string, displayName: string): Promise<boolean> {
   const supabase = createClient();
   const { error } = await supabase.from('group_members').insert({
-    group_id: groupId,
-    user_id: userId,
-    display_name: displayName,
-    role: 'member',
+    group_id: groupId, user_id: userId, display_name: displayName, role: 'member',
   });
   if (error) { console.error('joinGroup:', error); return false; }
   return true;
@@ -178,67 +205,56 @@ export async function joinGroup(
 export async function isAlreadyMember(groupId: string, userId: string): Promise<boolean> {
   const supabase = createClient();
   const { data } = await supabase
-    .from('group_members')
-    .select('id')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .maybeSingle(); // ← was .single() which throws error on 0 rows
-
+    .from('group_members').select('id')
+    .eq('group_id', groupId).eq('user_id', userId).maybeSingle();
   return !!data;
 }
 
-export async function updateMemberRole(
-  groupId: string,
-  targetUserId: string,
-  role: 'admin' | 'member'
-): Promise<boolean> {
+export async function updateMemberRole(groupId: string, targetUserId: string, role: 'admin' | 'member'): Promise<boolean> {
   const supabase = createClient();
   const { error } = await supabase
-    .from('group_members')
-    .update({ role })
-    .eq('group_id', groupId)
-    .eq('user_id', targetUserId);
-  if (error) { console.error('updateMemberRole:', error); return false; }
+    .from('group_members').update({ role })
+    .eq('group_id', groupId).eq('user_id', targetUserId);
+  if (error) return false;
   return true;
 }
 
 export async function removeMember(groupId: string, targetUserId: string): Promise<boolean> {
   const supabase = createClient();
   const { error } = await supabase
-    .from('group_members')
-    .delete()
-    .eq('group_id', groupId)
-    .eq('user_id', targetUserId);
-  if (error) { console.error('removeMember:', error); return false; }
+    .from('group_members').delete()
+    .eq('group_id', groupId).eq('user_id', targetUserId);
+  if (error) return false;
   return true;
 }
 
 export async function leaveGroup(groupId: string, userId: string): Promise<boolean> {
   const supabase = createClient();
-
   const members = await getGroupMembers(groupId);
   const admins = members.filter((m) => m.role === 'admin');
   const isAdmin = admins.some((m) => m.user_id === userId);
 
-  // If leaving user is the only admin, promote the next oldest member
   if (isAdmin && admins.length === 1 && members.length > 1) {
     const nextMember = members.find((m) => m.user_id !== userId);
     if (nextMember) await updateMemberRole(groupId, nextMember.user_id, 'admin');
   }
 
   const { error } = await supabase
-    .from('group_members')
-    .delete()
-    .eq('group_id', groupId)
-    .eq('user_id', userId);
+    .from('group_members').delete()
+    .eq('group_id', groupId).eq('user_id', userId);
+  if (error) return false;
 
-  if (error) { console.error('leaveGroup:', error); return false; }
-
-  // If no members left, delete the group
   const remaining = members.filter((m) => m.user_id !== userId);
   if (remaining.length === 0) await deleteGroup(groupId);
-
   return true;
+}
+
+export async function syncUserNameInGroups(userId: string, newName: string): Promise<void> {
+  const supabase = createClient();
+  await supabase.from('group_members').update({ display_name: newName }).eq('user_id', userId);
+  await supabase.from('group_expenses').update({ paid_by_name: newName }).eq('paid_by', userId);
+  await supabase.from('group_settlements').update({ from_user_name: newName }).eq('from_user_id', userId);
+  await supabase.from('group_settlements').update({ to_user_name: newName }).eq('to_user_id', userId);
 }
 
 // ── Expenses ──────────────────────────────────────────
@@ -246,13 +262,14 @@ export async function leaveGroup(groupId: string, userId: string): Promise<boole
 export async function getGroupExpenses(groupId: string): Promise<GroupExpense[]> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('group_expenses')
-    .select('*')
-    .eq('group_id', groupId)
+    .from('group_expenses').select('*').eq('group_id', groupId)
     .order('date', { ascending: false });
-
-  if (error) { console.error('getGroupExpenses:', error); return []; }
-  return data || [];
+  if (error) return [];
+  return (data || []).map((e) => ({
+    ...e,
+    participants: e.participants || [],
+    split_details: e.split_details || [],
+  }));
 }
 
 export async function addGroupExpense(
@@ -261,10 +278,20 @@ export async function addGroupExpense(
   const supabase = createClient();
   const { data, error } = await supabase
     .from('group_expenses')
-    .insert(expense)
-    .select()
-    .single();
-
+    .insert({
+      group_id: expense.group_id,
+      paid_by: expense.paid_by,
+      paid_by_name: expense.paid_by_name,
+      title: expense.title,
+      amount: expense.amount,
+      category: expense.category,
+      split_type: expense.split_type,
+      participants: expense.participants,
+      split_details: expense.split_details,
+      date: expense.date,
+      notes: expense.notes,
+    })
+    .select().single();
   if (error) { console.error('addGroupExpense:', error); return null; }
   return data;
 }
@@ -272,48 +299,75 @@ export async function addGroupExpense(
 export async function deleteGroupExpense(expenseId: string): Promise<boolean> {
   const supabase = createClient();
   const { error } = await supabase.from('group_expenses').delete().eq('id', expenseId);
-  if (error) { console.error('deleteGroupExpense:', error); return false; }
+  if (error) return false;
   return true;
 }
 
-// ── Settlements ──────────────────────────────────────────
+// ── Balance Calculation (CORE LOGIC) ──────────────────────────────────────────
 
-export interface SettlementDebt {
-  fromUserId: string;
-  fromUserName: string;
-  toUserId: string;
-  toUserName: string;
-  amount: number;
-}
-
-export function calculateSettlements(
+export function calculateNetBalances(
   expenses: GroupExpense[],
   members: GroupMember[]
-): SettlementDebt[] {
-  if (members.length === 0 || expenses.length === 0) return [];
-
-  const total = expenses.reduce((s, e) => s + e.amount, 0);
-  const fairShare = Math.round((total / members.length) * 100) / 100;
-
-  // Build net balance map — keyed by user_id
+): Record<string, { name: string; balance: number }> {
+  // Start everyone at 0
   const balances: Record<string, { name: string; balance: number }> = {};
   members.forEach((m) => {
     balances[m.user_id] = { name: m.display_name, balance: 0 };
   });
 
-  // Add what each person paid
-  expenses.forEach((e) => {
-    if (balances[e.paid_by]) {
-      balances[e.paid_by].balance += e.amount;
+  expenses.forEach((expense) => {
+    const paidBy = expense.paid_by;
+    const amount = expense.amount;
+
+    // Determine who participates in this expense
+    const participantIds = expense.participants && expense.participants.length > 0
+      ? expense.participants.filter((uid) => balances[uid]) // only valid members
+      : members.map((m) => m.user_id); // all members if empty
+
+    if (participantIds.length === 0) return;
+
+    if (expense.split_type === 'equal') {
+      // Equal split among participants
+      const sharePerPerson = Math.round((amount / participantIds.length) * 100) / 100;
+      participantIds.forEach((uid) => {
+        if (balances[uid]) balances[uid].balance -= sharePerPerson;
+      });
+
+    } else if (expense.split_type === 'exact') {
+      // Each person owes their exact specified amount
+      expense.split_details.forEach((detail) => {
+        if (balances[detail.user_id]) {
+          balances[detail.user_id].balance -= detail.amount;
+        }
+      });
+
+    } else if (expense.split_type === 'percentage') {
+      // Each person owes their percentage of total
+      expense.split_details.forEach((detail) => {
+        if (balances[detail.user_id]) {
+          const owedAmount = Math.round((amount * detail.amount / 100) * 100) / 100;
+          balances[detail.user_id].balance -= owedAmount;
+        }
+      });
+    }
+
+    // Payer gets credited the full amount
+    if (balances[paidBy]) {
+      balances[paidBy].balance += amount;
     }
   });
 
-  // Subtract their fair share
-  members.forEach((m) => {
-    balances[m.user_id].balance = Math.round((balances[m.user_id].balance - fairShare) * 100) / 100;
+  // Round all balances to avoid floating point issues
+  Object.keys(balances).forEach((uid) => {
+    balances[uid].balance = Math.round(balances[uid].balance * 100) / 100;
   });
 
-  // Split into creditors (+) and debtors (-)
+  return balances;
+}
+
+export function calculateSettlementsFromBalances(
+  balances: Record<string, { name: string; balance: number }>
+): SettlementDebt[] {
   const creditors: { id: string; name: string; amount: number }[] = [];
   const debtors: { id: string; name: string; amount: number }[] = [];
 
@@ -322,11 +376,9 @@ export function calculateSettlements(
     else if (balance < -0.01) debtors.push({ id: uid, name, amount: -balance });
   });
 
-  // Sort largest first
   creditors.sort((a, b) => b.amount - a.amount);
   debtors.sort((a, b) => b.amount - a.amount);
 
-  // Minimize transactions algorithm
   const settlements: SettlementDebt[] = [];
   let ci = 0;
   let di = 0;
@@ -356,92 +408,181 @@ export function calculateSettlements(
   return settlements;
 }
 
+// ── Settlement Rounds ──────────────────────────────────────────
 
-export async function getGroupSettlements(groupId: string): Promise<GroupSettlement[]> {
+export async function getSettlementRounds(groupId: string): Promise<GroupSettlementRound[]> {
   const supabase = createClient();
   const { data, error } = await supabase
-    .from('group_settlements')
-    .select('*')
-    .eq('group_id', groupId)
-    .order('created_at', { ascending: false });
-
-  if (error) { console.error('getGroupSettlements:', error); return []; }
+    .from('group_settlement_rounds').select('*').eq('group_id', groupId)
+    .order('round_number', { ascending: false });
+  if (error) { console.error('getSettlementRounds:', error); return []; }
   return data || [];
 }
 
-export async function saveSettlements(
+export async function getActiveRound(groupId: string): Promise<GroupSettlementRound | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('group_settlement_rounds').select('*')
+    .eq('group_id', groupId).eq('status', 'active').maybeSingle();
+  if (error) return null;
+  return data;
+}
+
+export async function createSettlementRound(
   groupId: string,
-  settlements: SettlementDebt[]
-): Promise<boolean> {
+  dateFrom: string,
+  dateTo: string,
+  expiresAt: string | null,
+  createdBy: string,
+  createdByName: string,
+  expenses: GroupExpense[],
+  members: GroupMember[]
+): Promise<GroupSettlementRound | null> {
   const supabase = createClient();
 
-  // Always wipe ALL unsettled first — no accumulation
-  await supabase
-    .from('group_settlements')
-    .delete()
-    .eq('group_id', groupId)
-    .eq('settled', false);
+  // Get next round number
+  const { data: existing } = await supabase
+    .from('group_settlement_rounds')
+    .select('round_number').eq('group_id', groupId)
+    .order('round_number', { ascending: false }).limit(1).maybeSingle();
+  const roundNumber = (existing?.round_number || 0) + 1;
 
-  if (settlements.length === 0) return true;
+  // Filter expenses to date range
+  const rangeExpenses = expenses.filter((e) => {
+    const d = e.date;
+    return d >= dateFrom && d <= dateTo;
+  });
 
-  const { error } = await supabase.from('group_settlements').insert(
-    settlements.map((s) => ({
+  const totalAmount = rangeExpenses.reduce((s, e) => s + e.amount, 0);
+
+  // Create the round
+  const { data: round, error: roundError } = await supabase
+    .from('group_settlement_rounds')
+    .insert({
       group_id: groupId,
-      from_user_id: s.fromUserId,
-      from_user_name: s.fromUserName,
-      to_user_id: s.toUserId,
-      to_user_name: s.toUserName,
-      amount: s.amount,
-      settled: false,
-    }))
-  );
+      round_number: roundNumber,
+      date_from: dateFrom,
+      date_to: dateTo,
+      expires_at: expiresAt,
+      created_by: createdBy,
+      created_by_name: createdByName,
+      status: 'active',
+      total_amount: totalAmount,
+      member_count: members.length,
+    })
+    .select().single();
 
-  if (error) { console.error('saveSettlements:', error); return false; }
+  if (roundError || !round) { console.error('createSettlementRound:', roundError); return null; }
+
+  // Calculate settlements for this range
+  const balances = calculateNetBalances(rangeExpenses, members);
+  const debts = calculateSettlementsFromBalances(balances);
+
+  if (debts.length > 0) {
+    const { error: debtsError } = await supabase.from('group_settlements').insert(
+      debts.map((d) => ({
+        group_id: groupId,
+        round_id: round.id,
+        from_user_id: d.fromUserId,
+        from_user_name: d.fromUserName,
+        to_user_id: d.toUserId,
+        to_user_name: d.toUserName,
+        amount: d.amount,
+        settled: false,
+      }))
+    );
+    if (debtsError) console.error('createSettlementRound debts:', debtsError);
+  }
+
+  return round;
+}
+
+export async function deleteSettlementRound(roundId: string): Promise<boolean> {
+  const supabase = createClient();
+  // Settlements cascade delete via FK
+  const { error } = await supabase
+    .from('group_settlement_rounds').delete().eq('id', roundId);
+  if (error) { console.error('deleteSettlementRound:', error); return false; }
   return true;
+}
+
+export async function checkAndExpireRound(round: GroupSettlementRound): Promise<boolean> {
+  if (!round.expires_at) return false;
+  if (round.status !== 'active') return false;
+  if (new Date(round.expires_at) > new Date()) return false;
+
+  const supabase = createClient();
+  await supabase
+    .from('group_settlement_rounds')
+    .update({ status: 'expired' }).eq('id', round.id);
+  return true;
+}
+
+// ── Settlements ──────────────────────────────────────────
+
+export async function getSettlementsForRound(roundId: string): Promise<GroupSettlement[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('group_settlements').select('*').eq('round_id', roundId)
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return data || [];
 }
 
 export async function markSettled(
   settlementId: string,
-  adminUserId: string
+  adminUserId: string,
+  roundId: string,
+  groupId: string,
+  fromUserId: string,
+  fromUserName: string,
+  toUserId: string,
+  toUserName: string,
+  amount: number
 ): Promise<boolean> {
   const supabase = createClient();
+
+  // Mark settlement as settled
   const { error } = await supabase
     .from('group_settlements')
-    .update({
-      settled: true,
-      settled_by: adminUserId,
-      settled_at: new Date().toISOString(),
-    })
+    .update({ settled: true, settled_by: adminUserId, settled_at: new Date().toISOString() })
     .eq('id', settlementId);
 
   if (error) { console.error('markSettled:', error); return false; }
+
+  // Create payment record
+  await supabase.from('group_payments').insert({
+    group_id: groupId,
+    settlement_id: settlementId,
+    round_id: roundId,
+    from_user_id: fromUserId,
+    from_user_name: fromUserName,
+    to_user_id: toUserId,
+    to_user_name: toUserName,
+    amount,
+    settled_by: adminUserId,
+    settled_at: new Date().toISOString(),
+  });
+
+  // Check if all debts in round are settled → complete the round
+  const { data: remaining } = await supabase
+    .from('group_settlements')
+    .select('id').eq('round_id', roundId).eq('settled', false);
+
+  if (!remaining || remaining.length === 0) {
+    await supabase
+      .from('group_settlement_rounds')
+      .update({ status: 'completed' }).eq('id', roundId);
+  }
+
   return true;
 }
-// Sync updated display name across all group tables when user changes their profile name
-export async function syncUserNameInGroups(userId: string, newName: string): Promise<void> {
+
+export async function getPaymentHistory(groupId: string): Promise<GroupPayment[]> {
   const supabase = createClient();
-
-  // Update display_name in group_members
-  await supabase
-    .from('group_members')
-    .update({ display_name: newName })
-    .eq('user_id', userId);
-
-  // Update paid_by_name in group_expenses
-  await supabase
-    .from('group_expenses')
-    .update({ paid_by_name: newName })
-    .eq('paid_by', userId);
-
-  // Update from_user_name in settlements
-  await supabase
-    .from('group_settlements')
-    .update({ from_user_name: newName })
-    .eq('from_user_id', userId);
-
-  // Update to_user_name in settlements
-  await supabase
-    .from('group_settlements')
-    .update({ to_user_name: newName })
-    .eq('to_user_id', userId);
+  const { data, error } = await supabase
+    .from('group_payments').select('*').eq('group_id', groupId)
+    .order('settled_at', { ascending: false });
+  if (error) return [];
+  return data || [];
 }
