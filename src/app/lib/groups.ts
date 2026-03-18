@@ -332,26 +332,28 @@ export function getUnsettledExpenses(
   expenses: GroupExpense[],
   completedRounds: GroupSettlementRound[]
 ): GroupExpense[] {
-  // Filter to approved only
   const approved = expenses.filter((e) => e.status === 'approved');
-
-  // If no completed rounds, ALL approved expenses are unsettled
   if (completedRounds.length === 0) return approved;
 
   return approved.filter((expense) => {
-    // Check if this expense is covered by any completed round
     const isCovered = completedRounds.some((round) => {
       if (round.status !== 'completed') return false;
 
+      // An expense is covered by a completed round if:
+      // 1. It was created BEFORE the round was created (it was part of the snapshot)
+      // 2. Its date falls within the round's date range
       const expenseCreatedAt = new Date(expense.created_at).getTime();
       const roundCreatedAt = new Date(round.created_at).getTime();
-      const expDate = expense.date;
 
-      return (
-        expenseCreatedAt < roundCreatedAt &&
-        expDate >= round.date_from &&
-        expDate <= round.date_to
-      );
+      // Strict: expense must have existed BEFORE the round was created
+      const wasBeforeRound = expenseCreatedAt < roundCreatedAt;
+
+      // Date range check using string comparison (safe for YYYY-MM-DD format)
+      const withinDateRange =
+        expense.date >= round.date_from &&
+        expense.date <= round.date_to;
+
+      return wasBeforeRound && withinDateRange;
     });
 
     return !isCovered;
