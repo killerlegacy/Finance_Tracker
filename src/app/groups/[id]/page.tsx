@@ -371,32 +371,50 @@ export default function GroupDashboardPage() {
   };
 
   // Derived
-  const currency = group?.currency || '₨';
-  const fmt = (n: number) => currency + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  
-  const pendingExpenses = expenses.filter((e) => e.status === 'pending');
-  const approvedExpenses = expenses.filter((e) => e.status === 'approved');
-  const rejectedExpenses = expenses.filter((e) => e.status === 'rejected');
-  
-  const completedRounds = rounds.filter((r) => r.status === 'completed');
-  
-  const totalSpent = approvedExpenses.reduce((s, e) => s + e.amount, 0);
-  const myExpensesTotal = approvedExpenses.filter((e) => e.paid_by === userId).reduce((s, e) => s + e.amount, 0);
-  
-  // Unsettled expenses = approved expenses NOT covered by any completed round
-  const unsettledExpenses = members.length > 0
-    ? getUnsettledExpenses(approvedExpenses, completedRounds)
-    : [];
-  
-  // Only calculate balances when members are loaded
-  const netBalances = members.length > 0
-    ? calculateNetBalances(unsettledExpenses, members)
-    : {};
-  
-  const myBalance = netBalances[userId]?.balance || 0;
+const currency = group?.currency || '₨';
+const fmt = (n: number) => currency + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
-  const pendingSettlements = activeSettlements.filter((s) => !s.settled);
-  const settledInRound = activeSettlements.filter((s) => s.settled);
+const pendingExpenses = expenses.filter((e) => e.status === 'pending');
+const approvedExpenses = expenses.filter((e) => e.status === 'approved');
+const rejectedExpenses = expenses.filter((e) => e.status === 'rejected');
+
+const completedRounds = rounds.filter((r) => r.status === 'completed');
+
+const totalSpent = approvedExpenses.reduce((s, e) => s + e.amount, 0);
+
+// Raw amount this user paid in expenses
+const myRawPaid = approvedExpenses
+  .filter((e) => e.paid_by === userId)
+  .reduce((s, e) => s + e.amount, 0);
+
+// How much this user paid OUT in settlements (debtor side)
+const mySettlementsPaid = paymentHistory
+  .filter((p) => p.from_user_id === userId)
+  .reduce((s, p) => s + p.amount, 0);
+
+// How much this user RECEIVED in settlements (creditor side)
+const mySettlementsReceived = paymentHistory
+  .filter((p) => p.to_user_id === userId)
+  .reduce((s, p) => s + p.amount, 0);
+
+// Net contribution = what you paid in expenses + what you paid in settlements - what you received
+// This is what you truly contributed out of pocket
+const myNetContribution = myRawPaid + mySettlementsPaid - mySettlementsReceived;
+
+// Unsettled expenses = approved expenses NOT covered by any completed round
+const unsettledExpenses = members.length > 0
+  ? getUnsettledExpenses(approvedExpenses, completedRounds)
+  : [];
+
+// Only calculate balances when members are loaded
+const netBalances = members.length > 0
+  ? calculateNetBalances(unsettledExpenses, members)
+  : {};
+
+const myBalance = netBalances[userId]?.balance || 0;
+
+const pendingSettlements = activeSettlements.filter((s) => !s.settled);
+const settledInRound = activeSettlements.filter((s) => s.settled);;
 
   const getTimeRemaining = (expiresAt: string | null) => {
     if (!expiresAt) return null;
@@ -493,8 +511,23 @@ export default function GroupDashboardPage() {
                 </p>
               </div>
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                <p className="text-slate-500 text-xs mb-1">You paid</p>
-                <p className="text-2xl font-bold text-slate-800">{fmt(myExpensesTotal)}</p>
+                <p className="text-slate-500 text-xs mb-1">Your contribution</p>
+                <p className="text-2xl font-bold text-slate-800">{fmt(myNetContribution)}</p>
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-xs text-slate-400">
+                    Paid expenses: {fmt(myRawPaid)}
+                  </p>
+                  {mySettlementsPaid > 0 && (
+                    <p className="text-xs text-red-400">
+                      + Paid out: {fmt(mySettlementsPaid)}
+                    </p>
+                  )}
+                  {mySettlementsReceived > 0 && (
+                    <p className="text-xs text-emerald-500">
+                      − Received: {fmt(mySettlementsReceived)}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
                 <p className="text-slate-500 text-xs mb-1">Your net balance</p>
