@@ -356,20 +356,27 @@ export default function GroupDashboardPage() {
   // Derived
   const currency = group?.currency || '₨';
   const fmt = (n: number) => currency + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-
-  const completedRounds = rounds.filter((r) => r.status === 'completed');
-
-  // Current balances only use UNSETTLED approved expenses
-  const unsettledExpenses = getUnsettledExpenses(expenses, completedRounds);
-  const netBalances = calculateNetBalances(unsettledExpenses, members);
-  const myBalance = netBalances[userId]?.balance || 0;
-
-  const totalSpent = expenses.filter((e) => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
-  const myExpensesTotal = expenses.filter((e) => e.paid_by === userId && e.status === 'approved').reduce((s, e) => s + e.amount, 0);
-
+  
   const pendingExpenses = expenses.filter((e) => e.status === 'pending');
   const approvedExpenses = expenses.filter((e) => e.status === 'approved');
   const rejectedExpenses = expenses.filter((e) => e.status === 'rejected');
+  
+  const completedRounds = rounds.filter((r) => r.status === 'completed');
+  
+  const totalSpent = approvedExpenses.reduce((s, e) => s + e.amount, 0);
+  const myExpensesTotal = approvedExpenses.filter((e) => e.paid_by === userId).reduce((s, e) => s + e.amount, 0);
+  
+  // Unsettled expenses = approved expenses NOT covered by any completed round
+  const unsettledExpenses = members.length > 0
+    ? getUnsettledExpenses(approvedExpenses, completedRounds)
+    : [];
+  
+  // Only calculate balances when members are loaded
+  const netBalances = members.length > 0
+    ? calculateNetBalances(unsettledExpenses, members)
+    : {};
+  
+  const myBalance = netBalances[userId]?.balance || 0;
 
   const pendingSettlements = activeSettlements.filter((s) => !s.settled);
   const settledInRound = activeSettlements.filter((s) => s.settled);
