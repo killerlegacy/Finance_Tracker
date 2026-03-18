@@ -1258,15 +1258,37 @@ export default function GroupDashboardPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-slate-500 block mb-1">From</label>
-                    <input type="date" value={settleDateFrom} onChange={(e) => setSettleDateFrom(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                    <input
+                      type="date"
+                      value={settleDateFrom}
+                      max={settleDateTo}
+                      onChange={(e) => {
+                        setSettleDateFrom(e.target.value);
+                        // If from becomes after to, push to forward
+                        if (e.target.value > settleDateTo) {
+                          setSettleDateTo(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
                   </div>
                   <div>
                     <label className="text-xs text-slate-500 block mb-1">To</label>
-                    <input type="date" value={settleDateTo} onChange={(e) => setSettleDateTo(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                    <input
+                      type="date"
+                      value={settleDateTo}
+                      min={settleDateFrom}
+                      max={new Date().toISOString().split('T')[0]}
+                      onChange={(e) => setSettleDateTo(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
                   </div>
                 </div>
+                {settleDateFrom && settleDateTo && settleDateFrom > settleDateTo && (
+                  <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1">
+                    ⚠ &quot;Date To&quot; cannot be before &quot;Date From&quot;
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1331,7 +1353,7 @@ export default function GroupDashboardPage() {
               <div className="flex gap-3">
                 <button onClick={() => setShowCreateSettlement(false)}
                   className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-700 font-medium text-sm">Cancel</button>
-                <button onClick={handleCreateSettlement} disabled={actionLoading || !settleDateFrom || !settleDateTo}
+                <button onClick={handleCreateSettlement} disabled={actionLoading || !settleDateFrom || !settleDateTo || settleDateFrom > settleDateTo}
                   className="flex-1 py-3 rounded-xl font-semibold text-white gradient-card hover:shadow-lg disabled:opacity-60 flex items-center justify-center gap-2 text-sm">
                   {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />}
                   {actionLoading ? 'Creating...' : 'Create Round'}
