@@ -325,19 +325,20 @@ export async function deleteGroupExpense(expenseId: string): Promise<boolean> {
 
 // ── Balance Calculation ──────────────────────────────────────────
 
-// Get expenses that are NOT covered by any completed settlement round
-// These are the "current unsettled" expenses that affect live balances
+// Get approved expenses NOT covered by any completed settlement round
+// Pass in already-filtered approved expenses OR all expenses (it will filter internally)
 export function getUnsettledExpenses(
   expenses: GroupExpense[],
   completedRounds: GroupSettlementRound[]
 ): GroupExpense[] {
-  // Only use approved expenses
-  const approvedExpenses = expenses.filter((e) => e.status === 'approved');
+  // Filter to approved only
+  const approved = expenses.filter((e) => e.status === 'approved');
 
-  if (completedRounds.length === 0) return approvedExpenses;
+  // If no completed rounds, ALL approved expenses are unsettled
+  if (completedRounds.length === 0) return approved;
 
-  // An expense is "settled" if it falls within a completed round's date range
-  return approvedExpenses.filter((expense) => {
+  // Exclude expenses whose date falls within a completed round's date range
+  return approved.filter((expense) => {
     const expDate = expense.date;
     const isCoveredByCompletedRound = completedRounds.some(
       (round) =>
@@ -353,19 +354,18 @@ export function calculateNetBalances(
   expenses: GroupExpense[],
   members: GroupMember[]
 ): Record<string, { name: string; balance: number }> {
+  if (members.length === 0) return {};
+
   const balances: Record<string, { name: string; balance: number }> = {};
   members.forEach((m) => {
     balances[m.user_id] = { name: m.display_name, balance: 0 };
   });
 
-  // Only use approved expenses
-  const approvedExpenses = expenses.filter((e) => e.status === 'approved');
-
-  approvedExpenses.forEach((expense) => {
+  // Trust the caller to pass correct expenses — don't re-filter here
+  expenses.forEach((expense) => {
     const paidBy = expense.paid_by;
     const amount = expense.amount;
 
-    // Who participates — empty means all members
     const participantIds =
       expense.participants?.length > 0
         ? expense.participants.filter((uid) => balances[uid])
