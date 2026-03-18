@@ -326,7 +326,8 @@ export async function deleteGroupExpense(expenseId: string): Promise<boolean> {
 // ── Balance Calculation ──────────────────────────────────────────
 
 // Get approved expenses NOT covered by any completed settlement round
-// Pass in already-filtered approved expenses OR all expenses (it will filter internally)
+// Uses created_at timestamp comparison (not just date) so expenses added
+// AFTER a settlement was created — even on the same date — are correctly included
 export function getUnsettledExpenses(
   expenses: GroupExpense[],
   completedRounds: GroupSettlementRound[]
@@ -337,16 +338,23 @@ export function getUnsettledExpenses(
   // If no completed rounds, ALL approved expenses are unsettled
   if (completedRounds.length === 0) return approved;
 
-  // Exclude expenses whose date falls within a completed round's date range
   return approved.filter((expense) => {
-    const expDate = expense.date;
-    const isCoveredByCompletedRound = completedRounds.some(
-      (round) =>
-        round.status === 'completed' &&
+    // Check if this expense is covered by any completed round
+    const isCovered = completedRounds.some((round) => {
+      if (round.status !== 'completed') return false;
+
+      const expenseCreatedAt = new Date(expense.created_at).getTime();
+      const roundCreatedAt = new Date(round.created_at).getTime();
+      const expDate = expense.date;
+
+      return (
+        expenseCreatedAt < roundCreatedAt &&
         expDate >= round.date_from &&
         expDate <= round.date_to
-    );
-    return !isCoveredByCompletedRound;
+      );
+    });
+
+    return !isCovered;
   });
 }
 
